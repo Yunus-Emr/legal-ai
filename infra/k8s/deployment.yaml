@@ -1,0 +1,40 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: legal-ai-backend
+  labels:
+    app: legal-ai-backend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: legal-ai-backend
+  template:
+    metadata:
+      labels:
+        app: legal-ai-backend
+    spec:
+      containers:
+      - name: fastapi-server
+        image: legal-ai-backend:v1.0.0
+        ports:
+        - containerPort: 8000
+        env:
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: backend-secrets
+              key: database_url
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: legal-ai-service
+spec:
+  selector:
+    app: legal-ai-backend
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 8000
+  type: LoadBalancer
