@@ -15,7 +15,7 @@ engine = create_async_engine(
     max_overflow=10,
 )
 
-AsyncSessionLocal = sessionmaker(
+SessionLocal = sessionmaker(
     bind=engine,
     class_=AsyncSession,
     expire_on_commit=False,
@@ -24,7 +24,7 @@ AsyncSessionLocal = sessionmaker(
 
 async def get_db():
     """FastAPI dependency: async DB session."""
-    async with AsyncSessionLocal() as session:
+    async with SessionLocal() as session:
         try:
             yield session
             await session.commit()

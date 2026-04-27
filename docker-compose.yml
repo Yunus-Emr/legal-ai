@@ -50,7 +50,7 @@ services:
     image: opensearchproject/opensearch:2.12.0
     environment:
       - discovery.type=single-node
-      - OPENSEARCH_INITIAL_ADMIN_PASSWORD=Admin@1234!
+      - OPENSEARCH_INITIAL_ADMIN_PASSWORD=StrongLegalAI2026_SecurePassword!
       - plugins.security.disabled=true
     ports:
       - "9200:9200"

@@ -135,4 +135,19 @@ export const dashboardApi = {
   },
 }
 
+// ── Admin ─────────────────────────────────────────────────────
+export const adminApi = {
+  getUsers: async () => {
+    const { data } = await api.get('/admin/users')
+    return data as any[]
+  },
+  getConfig: async () => {
+    const { data } = await api.get('/admin/config')
+    return data
+  },
+  updateConfig: async (config: any) => {
+    await api.post('/admin/config', config)
+  },
+}
+
 export default api

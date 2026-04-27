@@ -6,7 +6,7 @@ import { useChatStore } from '../store/chatStore'
 
 export default function ChatPage() {
   const [historyOpen, setHistoryOpen] = useState(true)
-  const { activeSessionId, createSession, fetchSessions, sessions } = useChatStore()
+  const { activeSessionId, createSession, fetchSessions, sessions, isLoading } = useChatStore()
 
   useEffect(() => {
     fetchSessions()

@@ -15,6 +15,25 @@ interface UserRow {
   created_at: string
 }
 
+const configSections = [
+  {
+    title: 'Sistem Parametreleri',
+    icon: Settings,
+    items: [
+      { key: 'max_docs', label: 'Maks. Doküman', value: 1000, type: 'number', icon: Database },
+      { key: 'chunk_size', label: 'Parça Boyutu', value: 512, type: 'number', icon: Cpu },
+    ]
+  },
+  {
+    title: 'Model Ayarları',
+    icon: Cpu,
+    items: [
+      { key: 'llm_temp', label: 'LLM Sıcaklığı', value: 0.7, type: 'number', icon: Settings },
+      { key: 'top_k', label: 'Top-K Arama', value: 5, type: 'number', icon: Search },
+    ]
+  }
+]
+
 export default function AdminPage() {
   const [users, setUsers] = useState<UserRow[]>([])
   const [loading, setLoading] = useState(true)

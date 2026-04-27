@@ -15,9 +15,11 @@ async def health_check():
     postgres_ok = False
     try:
         async with SessionLocal() as db:
-            await db.execute("SELECT 1")
+            from sqlalchemy import text
+            await db.execute(text("SELECT 1"))
             postgres_ok = True
-    except Exception:
+    except Exception as e:
+        print(f"Postgres health check error: {e}")
         pass
 
     opensearch_ok = await opensearch_client.ping()

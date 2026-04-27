@@ -95,5 +95,14 @@ class OpenSearchClient:
             body={"query": {"term": {"doc_id": doc_id}}},
         )
 
+    async def ping(self) -> bool:
+        client = self._get_client()
+        if client is None:
+            return False
+        try:
+            return await client.ping()
+        except Exception:
+            return False
+
 
 opensearch_client = OpenSearchClient()

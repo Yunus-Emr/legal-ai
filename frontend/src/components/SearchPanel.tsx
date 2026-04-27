@@ -17,13 +17,19 @@ export default function SearchPanel() {
   const [loading, setLoading] = useState(false)
   const [topK, setTopK] = useState(5)
   const [searched, setSearched] = useState(false)
+  const [selectedFilter, setSelectedFilter] = useState<string | null>(null)
 
-  const handleSearch = async () => {
-    if (!query.trim()) return
+  const handleSearch = async (filterOverride?: string | null) => {
+    const activeFilter = filterOverride !== undefined ? filterOverride : selectedFilter
+    const finalQuery = query.trim()
+    if (!finalQuery && !activeFilter) return
+
     setLoading(true)
     setSearched(true)
     try {
-      const data = await searchApi.search(query, topK)
+      // Mock filter application: prefixing the query
+      const fullQuery = activeFilter ? `[${activeFilter}] ${finalQuery}` : finalQuery
+      const data = await searchApi.search(fullQuery, topK)
       setResults(data.results ?? [])
     } catch {
       toast.error('Arama başarısız oldu.')
@@ -35,7 +41,9 @@ export default function SearchPanel() {
 
   const highlight = (text: string, q: string) => {
     if (!q.trim()) return text
-    const regex = new RegExp(`(${q.split(' ').filter(Boolean).join('|')})`, 'gi')
+    const words = q.split(' ').filter(Boolean).map(w => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+    if (words.length === 0) return text
+    const regex = new RegExp(`(${words.join('|')})`, 'gi')
     const parts = text.split(regex)
     return parts.map((part) =>
       regex.test(part) ? `<mark>${part}</mark>` : part,
@@ -69,8 +77,8 @@ export default function SearchPanel() {
         </select>
         <button
           className="btn btn-primary"
-          onClick={handleSearch}
-          disabled={loading || !query.trim()}
+          onClick={() => handleSearch()}
+          disabled={loading || (!query.trim() && !selectedFilter)}
         >
           {loading ? <div className="spinner" /> : <Search size={15} />}
           Ara
@@ -92,7 +100,16 @@ export default function SearchPanel() {
         </span>
         {['Sözleşmeler', 'Kanunlar', 'Yönetmelikler', 'Mahkeme Kararları'].map(
           f => (
-            <button key={f} className="badge badge-accent" style={{ cursor: 'pointer' }}>
+            <button 
+              key={f} 
+              className={`badge ${selectedFilter === f ? 'badge-accent' : 'badge-secondary'}`} 
+              style={{ cursor: 'pointer', opacity: selectedFilter === f ? 1 : 0.6 }}
+              onClick={() => {
+                const next = selectedFilter === f ? null : f
+                setSelectedFilter(next)
+                if (query.trim()) handleSearch(next)
+              }}
+            >
               {f}
             </button>
           ),
