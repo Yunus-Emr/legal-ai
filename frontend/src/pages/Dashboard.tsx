@@ -46,13 +46,18 @@ export default function Dashboard() {
 
   useEffect(() => {
     const fetchData = async () => {
+      // 1. Health check (highest priority for status display)
       try {
-        const [statsData, healthData, docsData, activityData] = await Promise.all([
-          dashboardApi.getStats(),
-          healthApi.check(),
-          documentsApi.list(),
-          dashboardApi.getRecentActivity()
-        ])
+        const healthData = await healthApi.check()
+        setHealth(healthData)
+      } catch (e) {
+        console.error("Health check failed:", e)
+        setHealth(prev => ({ ...prev, status: 'error' }))
+      }
+
+      // 2. Stats
+      try {
+        const statsData = await dashboardApi.getStats()
         setStats({
           total_documents: statsData.total_documents,
           total_chunks: statsData.total_chunks,
@@ -60,14 +65,27 @@ export default function Dashboard() {
           avg_response_time_ms: statsData.avg_response_time_ms,
           current_user_name: statsData.current_user_name || 'Kullanıcı'
         })
-        setHealth(healthData)
-        setRecentDocs(docsData.documents.slice(0, 5))
-        setActivities(activityData)
-      } catch (err) {
-        console.error("Dashboard data fetch error:", err)
-      } finally {
-        setLoading(false)
+      } catch (e) {
+        console.error("Stats fetch failed:", e)
       }
+
+      // 3. Documents
+      try {
+        const docsData = await documentsApi.list()
+        setRecentDocs(docsData.documents.slice(0, 5))
+      } catch (e) {
+        console.error("Docs list failed:", e)
+      }
+
+      // 4. Activity
+      try {
+        const activityData = await dashboardApi.getRecentActivity()
+        setActivities(activityData)
+      } catch (e) {
+        console.error("Activity fetch failed:", e)
+      }
+
+      setLoading(false)
     }
     fetchData()
   }, [])

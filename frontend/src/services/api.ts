@@ -126,7 +126,7 @@ export const dashboardApi = {
   },
 
   getRecentActivity: async () => {
-    const { data } = await api.get('/dashboard/activity')
+    const { data } = await api.get('/analytics/activity')
     return data as Array<{
       type: 'query' | 'upload' | 'delete'
       description: string
