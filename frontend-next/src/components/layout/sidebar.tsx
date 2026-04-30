@@ -132,7 +132,7 @@ export function Sidebar() {
                 if (isCollapsed) {
                   return (
                     <Tooltip key={item.href}>
-                      {/* @ts-ignore */}
+                      {/* @ts-expect-error */}
                       <TooltipTrigger asChild>
                         {linkContent}
                       </TooltipTrigger>

@@ -19,7 +19,7 @@ const stats = [
   { label: "Time Saved (hrs)", value: "184", icon: Clock, trend: "Last 30 days" },
 ];
 
-function BriefcaseIcon(props: any) {
+function BriefcaseIcon(props: React.SVGProps<SVGSVGElement>) {
   return (
     <svg
       {...props}
@@ -120,7 +120,7 @@ export default function Dashboard() {
                         Discrepancy found in Limitation of Liability clause
                       </h4>
                       <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
-                        The recently uploaded "Vendor_Agreement_v3.pdf" contains a liability cap that contradicts the master service agreement standard terms (Section 4.2).
+                        The recently uploaded &quot;Vendor_Agreement_v3.pdf&quot; contains a liability cap that contradicts the master service agreement standard terms (Section 4.2).
                       </p>
                       <div className="mt-3 flex items-center gap-3 text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
                         <span className="text-foreground">Matter:</span> Global Logistics

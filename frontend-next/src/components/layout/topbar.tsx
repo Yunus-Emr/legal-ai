@@ -14,7 +14,7 @@ export function TopBar() {
       {/* Mobile Menu */}
       <div className="md:hidden mr-2">
         <Sheet>
-          {/* @ts-ignore */}
+          {/* @ts-expect-error */}
           <SheetTrigger asChild>
             <button className="p-2 text-muted-foreground hover:text-foreground">
               <Menu className="w-5 h-5" />
@@ -43,7 +43,7 @@ export function TopBar() {
       {/* Right Actions */}
       <div className="flex items-center gap-2 md:gap-4 ml-4">
         <Tooltip>
-          {/* @ts-ignore */}
+          {/* @ts-expect-error */}
           <TooltipTrigger asChild>
             <button className="p-2 rounded-full hover:bg-elevated text-muted-foreground hover:text-foreground transition-all relative">
               <Bell className="w-5 h-5" />

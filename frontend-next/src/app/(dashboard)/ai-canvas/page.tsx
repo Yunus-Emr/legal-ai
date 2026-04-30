@@ -49,7 +49,7 @@ export default function AICanvasPage() {
 
   return (
     <div className="h-full flex flex-col bg-background font-sans">
-      {/* @ts-ignore - known React 19 compat issue with react-resizable-panels prop types */}
+      {/* @ts-expect-error - known React 19 compat issue with react-resizable-panels prop types */}
       <ResizablePanelGroup direction="horizontal" className="flex-1">
         
         {/* Left Panel: 60% Document / Canvas */}
@@ -105,7 +105,7 @@ export default function AICanvasPage() {
             <div className="flex items-center gap-2">
               <Sparkles className="w-4 h-4 text-[#7C3AED]" />
               <DropdownMenu>
-                {/* @ts-ignore */}
+                {/* @ts-expect-error */}
                 <DropdownMenuTrigger asChild>
                   <Button variant="ghost" size="sm" className="h-8 text-sm font-medium text-foreground hover:bg-elevated px-2">
                     {mode} <ChevronDown className="w-3 h-3 ml-2 opacity-50" />
@@ -123,7 +123,7 @@ export default function AICanvasPage() {
             </div>
 
             <DropdownMenu>
-              {/* @ts-ignore */}
+              {/* @ts-expect-error */}
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" size="sm" className="h-8 text-xs text-muted-foreground hover:text-foreground px-2 font-mono">
                   <Scale className="w-3.5 h-3.5 mr-2" />
