@@ -24,25 +24,28 @@ function AppLayout() {
 
   return (
     <>
-      {isAuthenticated && !isAuthPage && <CommandPalette />}
+      {!isAuthPage && <CommandPalette />}
       <PaletteSelector />
       <div className="app-layout">
-        {isAuthenticated && !isAuthPage && <Sidebar />}
+        {/* Sidebar visible for everyone except auth pages */}
+        {!isAuthPage && <Sidebar />}
         <div className={`main-content ${isAuthPage ? 'auth-main' : ''}`}>
           <Routes>
-            {/* Public */}
-            <Route path="/login" element={isAuthenticated ? <Navigate to="/dashboard" replace /> : <LoginPage />} />
-            <Route path="/register" element={isAuthenticated ? <Navigate to="/dashboard" replace /> : <RegisterPage />} />
+            {/* ── Auth pages ── */}
+            <Route path="/login"    element={isAuthenticated ? <Navigate to="/chat" replace /> : <LoginPage />} />
+            <Route path="/register" element={isAuthenticated ? <Navigate to="/chat" replace /> : <RegisterPage />} />
 
-            {/* Protected */}
-            <Route path="/" element={<Navigate to="/dashboard" replace />} />
+            {/* ── Public routes (guest OK) ── */}
+            <Route path="/"       element={<Navigate to="/chat" replace />} />
+            <Route path="/chat"   element={<ChatPage />} />
+            <Route path="/search" element={<SearchPage />} />
+
+            {/* ── Protected routes (login required) ── */}
             <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
-            <Route path="/chat" element={<ProtectedRoute><ChatPage /></ProtectedRoute>} />
-            <Route path="/upload" element={<ProtectedRoute><UploadPage /></ProtectedRoute>} />
-            <Route path="/search" element={<ProtectedRoute><SearchPage /></ProtectedRoute>} />
+            <Route path="/upload"    element={<ProtectedRoute><UploadPage /></ProtectedRoute>} />
             <Route path="/documents" element={<ProtectedRoute><DocumentsPage /></ProtectedRoute>} />
             <Route path="/analytics" element={<ProtectedRoute><AnalyticsPage /></ProtectedRoute>} />
-            <Route path="/admin" element={<ProtectedRoute><AdminPage /></ProtectedRoute>} />
+            <Route path="/admin"     element={<ProtectedRoute requireAdmin><AdminPage /></ProtectedRoute>} />
           </Routes>
         </div>
       </div>
@@ -72,3 +75,4 @@ export default function App() {
     </BrowserRouter>
   )
 }
+

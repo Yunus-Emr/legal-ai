@@ -98,10 +98,32 @@ class DocumentService:
         return {**doc_data, "chunk_count": indexed if 'indexed' in locals() else 0, "status": "indexed"}
 
     def _parse(self, content: bytes, content_type: str) -> str:
+        # Plain text
         if content_type == "text/plain":
             return content.decode("utf-8", errors="replace")
 
-        # PDF parsing
+        # HTML
+        if content_type == "text/html":
+            try:
+                from bs4 import BeautifulSoup
+                soup = BeautifulSoup(content, "html.parser")
+                return soup.get_text(separator="\n", strip=True)
+            except ImportError:
+                return content.decode("utf-8", errors="replace")
+
+        # DOCX
+        if "wordprocessingml" in (content_type or "") or content_type == "application/octet-stream":
+            try:
+                import io
+                from docx import Document as DocxDocument
+                doc = DocxDocument(io.BytesIO(content))
+                paragraphs = [p.text for p in doc.paragraphs if p.text.strip()]
+                return "\n\n".join(paragraphs)
+            except ImportError:
+                logger.warning("[DocService] python-docx yüklü değil, metin çıkarılamadı")
+                return ""
+
+        # PDF (default)
         try:
             import pdfplumber
             with pdfplumber.open(io.BytesIO(content)) as pdf:

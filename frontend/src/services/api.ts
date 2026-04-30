@@ -141,13 +141,37 @@ export const adminApi = {
     const { data } = await api.get('/admin/users')
     return data as any[]
   },
+  updateUser: async (userId: string, update: { is_active?: boolean; role?: string }) => {
+    await api.patch(`/admin/users/${userId}`, update)
+  },
   getConfig: async () => {
     const { data } = await api.get('/admin/config')
     return data
   },
   updateConfig: async (config: any) => {
-    await api.post('/admin/config', config)
+    await api.post('/admin/config', { values: config })
+  },
+}
+
+// ── Analytics (extended) ──────────────────────────────────────
+export const analyticsApi = {
+  getQueryTrends: async () => {
+    const { data } = await api.get('/analytics/query-trends')
+    return data as Array<{ date: string; queries: number }>
+  },
+  getTopDocuments: async () => {
+    const { data } = await api.get('/analytics/top-documents')
+    return data as Array<{ name: string; queries: number }>
+  },
+  getResponseTimeDistribution: async () => {
+    const { data } = await api.get('/analytics/response-time')
+    return data as Array<{ range: string; count: number }>
+  },
+  getHeatmap: async () => {
+    const { data } = await api.get('/analytics/heatmap')
+    return data as Array<{ day: number; hour: number; value: number }>
   },
 }
 
 export default api
+

@@ -1,3 +1,4 @@
+// ── Chat WebSocket ────────────────────────────────────────────
 let ws: WebSocket | null = null
 type MessageHandler = (data: unknown) => void
 
@@ -50,3 +51,59 @@ export function disconnectWebSocket() {
   ws?.close()
   ws = null
 }
+
+// ── Processing WebSocket ──────────────────────────────────────
+export interface ProcessingEvent {
+  type: 'progress' | 'complete' | 'error'
+  doc_id: string
+  stage?: string
+  progress?: number
+  chunk_count?: number
+  message?: string
+}
+
+const processingConnections = new Map<string, WebSocket>()
+
+export function connectProcessingWS(
+  docId: string,
+  onEvent: (event: ProcessingEvent) => void,
+  onDone?: () => void,
+): WebSocket {
+  const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws'
+  const host = window.location.hostname
+  const url = `${protocol}://${host}:8000/ws/processing/${docId}`
+
+  const socket = new WebSocket(url)
+  processingConnections.set(docId, socket)
+
+  socket.onmessage = e => {
+    try {
+      const event = JSON.parse(e.data) as ProcessingEvent
+      onEvent(event)
+      if (event.type === 'complete' || event.type === 'error') {
+        onDone?.()
+        socket.close()
+        processingConnections.delete(docId)
+      }
+    } catch {
+      console.error('[WS-Processing] Parse error:', e.data)
+    }
+  }
+
+  socket.onerror = () => {
+    onEvent({ type: 'error', doc_id: docId, message: 'WebSocket bağlantı hatası' })
+    processingConnections.delete(docId)
+  }
+
+  socket.onclose = () => {
+    processingConnections.delete(docId)
+  }
+
+  return socket
+}
+
+export function disconnectProcessingWS(docId: string) {
+  processingConnections.get(docId)?.close()
+  processingConnections.delete(docId)
+}
+

@@ -36,7 +36,6 @@ const configSections = [
 
 export default function AdminPage() {
   const [users, setUsers] = useState<UserRow[]>([])
-  const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [expandedSections, setExpandedSections] = useState<Set<number>>(new Set([0, 1]))
 
@@ -47,8 +46,6 @@ export default function AdminPage() {
         setUsers(data)
       } catch (e) {
         console.error("Failed to fetch users", e)
-      } finally {
-        setLoading(false)
       }
     }
     fetchUsers()

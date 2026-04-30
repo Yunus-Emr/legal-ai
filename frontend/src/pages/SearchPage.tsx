@@ -7,7 +7,7 @@ export default function SearchPage() {
         <div>
           <div className="header-title">🔍 Semantik Arama</div>
           <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-            Dokümanlarınızda vektör tabanlı anlam arama
+            Dokümanlarınız üzerinde anlam tabanlı vektör araması
           </div>
         </div>
       </div>

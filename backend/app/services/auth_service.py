@@ -2,9 +2,10 @@ from datetime import datetime, timedelta
 from typing import Optional
 from jose import jwt
 from passlib.context import CryptContext
+from app.core.config import settings
 
-# In a real app, read these from settings
-SECRET_KEY = "legal-ai-super-secret-key"
+# Read from settings — never hardcode in source
+SECRET_KEY = settings.SECRET_KEY
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60
 

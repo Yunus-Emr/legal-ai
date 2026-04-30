@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { authApi } from '../services/api'
+import api from '../services/api'
 
 export interface User {
   id: string
@@ -20,6 +21,20 @@ interface AuthState {
   hydrate: () => void
 }
 
+async function fetchMe(): Promise<User | null> {
+  try {
+    const { data } = await api.get('/auth/me')
+    return {
+      id: data.id,
+      name: data.name,
+      email: data.email,
+      role: data.role as 'admin' | 'user',
+    }
+  } catch {
+    return null
+  }
+}
+
 export const useAuthStore = create<AuthState>((set) => ({
   user: null,
   token: null,
@@ -30,15 +45,23 @@ export const useAuthStore = create<AuthState>((set) => ({
     set({ isLoading: true })
     try {
       const response = await authApi.login(email, password)
-      const mockUser: User = {
-        id: response.user_id,
-        name: email.split('@')[0].replace(/[._]/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
-        email,
-        role: email.includes('admin') ? 'admin' : 'user',
-      }
       localStorage.setItem('legal_ai_token', response.access_token)
-      localStorage.setItem('legal_ai_user', JSON.stringify(mockUser))
-      set({ user: mockUser, token: response.access_token, isAuthenticated: true, isLoading: false })
+      // Fetch real user data from /me
+      const user = await fetchMe()
+      if (user) {
+        localStorage.setItem('legal_ai_user', JSON.stringify(user))
+        set({ user, token: response.access_token, isAuthenticated: true, isLoading: false })
+      } else {
+        // Fallback if /me fails
+        const fallback: User = {
+          id: response.user_id,
+          name: email.split('@')[0],
+          email,
+          role: 'user',
+        }
+        localStorage.setItem('legal_ai_user', JSON.stringify(fallback))
+        set({ user: fallback, token: response.access_token, isAuthenticated: true, isLoading: false })
+      }
     } catch (e) {
       set({ isLoading: false })
       throw e
@@ -49,10 +72,10 @@ export const useAuthStore = create<AuthState>((set) => ({
     set({ isLoading: true })
     try {
       const response = await authApi.register(name, email, password)
-      const mockUser: User = { id: response.user_id, name, email, role: 'user' }
       localStorage.setItem('legal_ai_token', response.access_token)
-      localStorage.setItem('legal_ai_user', JSON.stringify(mockUser))
-      set({ user: mockUser, token: response.access_token, isAuthenticated: true, isLoading: false })
+      const user = await fetchMe() ?? { id: response.user_id, name, email, role: 'user' as const }
+      localStorage.setItem('legal_ai_user', JSON.stringify(user))
+      set({ user, token: response.access_token, isAuthenticated: true, isLoading: false })
     } catch (e) {
       set({ isLoading: false })
       throw e
@@ -72,6 +95,13 @@ export const useAuthStore = create<AuthState>((set) => ({
       try {
         const user = JSON.parse(userStr) as User
         set({ user, token, isAuthenticated: true })
+        // Refresh role from server in background
+        fetchMe().then(freshUser => {
+          if (freshUser) {
+            localStorage.setItem('legal_ai_user', JSON.stringify(freshUser))
+            set({ user: freshUser })
+          }
+        })
       } catch {
         localStorage.removeItem('legal_ai_token')
         localStorage.removeItem('legal_ai_user')
@@ -79,3 +109,4 @@ export const useAuthStore = create<AuthState>((set) => ({
     }
   },
 }))
+

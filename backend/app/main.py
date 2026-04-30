@@ -4,7 +4,7 @@ from fastapi.middleware.trustedhost import TrustedHostMiddleware
 
 from app.core.config import settings
 from app.core.logger import get_logger
-from app.api.routes import chat, documents, search, health, auth, drafts, analytics, admin
+from app.api.routes import chat, documents, search, health, auth, drafts, analytics, admin, ws
 
 logger = get_logger(__name__)
 
@@ -34,6 +34,7 @@ app.include_router(auth.router, prefix="/api/v1/auth", tags=["Auth"])
 app.include_router(drafts.router, prefix="/api/v1/drafts", tags=["Drafts"])
 app.include_router(analytics.router, prefix="/api/v1/analytics", tags=["Analytics"])
 app.include_router(admin.router, prefix="/api/v1/admin", tags=["Admin"])
+app.include_router(ws.router, tags=["WebSocket"])
 
 # ── Startup / Shutdown ──────────────────────────────────────────
 @app.on_event("startup")

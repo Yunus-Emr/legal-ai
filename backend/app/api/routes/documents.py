@@ -11,8 +11,15 @@ from app.core.logger import get_logger
 logger = get_logger(__name__)
 router = APIRouter()
 
-ALLOWED_TYPES = {"application/pdf", "text/plain"}
+ALLOWED_TYPES = {
+    "application/pdf",
+    "text/plain",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",  # .docx
+    "text/html",
+    "application/octet-stream",  # some browsers send this for docx
+}
 MAX_SIZE_MB = 50
+
 
 
 @router.get("/documents")
