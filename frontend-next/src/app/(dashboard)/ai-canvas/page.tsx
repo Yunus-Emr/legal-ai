@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
@@ -12,6 +12,8 @@ import {
 import { motion } from "framer-motion";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { useChat } from "@/hooks/useChat";
+import { useAuthStore } from "@/store/authStore";
 
 function CircularGauge({ score, size = 64, strokeWidth = 6 }: { score: number, size?: number, strokeWidth?: number }) {
   const radius = (size - strokeWidth) / 2;
@@ -42,10 +44,38 @@ function TypingDots() {
   );
 }
 
+function getInitials(name: string): string {
+  return name.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2);
+}
+
 export default function AICanvasPage() {
+  const { user } = useAuthStore();
   const [input, setInput] = useState("");
   const [mode, setMode] = useState("Contract Review");
   const [jurisdiction, setJurisdiction] = useState("New York, USA");
+  
+  const { messages, isStreaming, sources, error, sendMessage } = useChat();
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [messages]);
+
+  const handleSend = () => {
+    if (input.trim() && !isStreaming) {
+      sendMessage(input.trim());
+      setInput("");
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      handleSend();
+    }
+  };
 
   return (
     <div className="h-full flex flex-col bg-background font-sans">
@@ -139,114 +169,96 @@ export default function AICanvasPage() {
             </DropdownMenu>
           </div>
 
-          <ScrollArea className="flex-1 p-4 bg-background relative">
+          <div className="flex-1 p-4 bg-background relative overflow-y-auto" ref={scrollRef}>
             <div className="flex flex-col gap-6 max-w-full pb-4">
               
-              {/* AI Risk Score Overview (Contract Analysis specific) */}
-              {mode === "Contract Review" && (
-                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex items-center gap-4 p-4 bg-elevated border border-border rounded-xl">
-                  <CircularGauge score={82} size={54} />
-                  <div>
-                    <h3 className="text-sm font-semibold text-foreground">Contract Risk Score: High</h3>
-                    <div className="flex gap-3 mt-1 text-xs text-muted-foreground">
-                      <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-danger"></div> 3 Liabilities</span>
-                      <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-warning"></div> 2 Missing Clauses</span>
-                    </div>
-                  </div>
-                </motion.div>
-              )}
-
-              {/* AI Message */}
-              <motion.div 
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="flex flex-col gap-2"
-              >
-                <div className="flex items-center gap-2">
-                  <div className="w-6 h-6 rounded bg-[#7C3AED]/20 flex items-center justify-center border border-[#7C3AED]/30">
-                    <Sparkles className="w-3.5 h-3.5 text-[#7C3AED]" />
-                  </div>
-                  <span className="text-xs font-semibold text-foreground uppercase tracking-wider">Analysis Complete</span>
+              {/* Messages */}
+              {messages.length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-48 text-muted-foreground opacity-50">
+                  <Sparkles className="w-8 h-8 mb-4 text-[#7C3AED]" />
+                  <p className="text-sm">Instruct AI Co-Counsel below...</p>
                 </div>
-                
-                {/* AI Glow Card */}
-                <div className="ai-glow rounded-xl rounded-tl-none mt-1">
-                  <div className="glass-panel p-4 rounded-xl rounded-tl-none text-sm leading-relaxed text-foreground/90 font-sans">
-                    I've reviewed the <strong>Limitation of Liability (Section 4.2)</strong>. The current liability cap is set to 6 months of preceding fees <sup className="text-primary font-bold cursor-pointer hover:underline">[1]</sup>.
-                    <br /><br />
-                    <span className="text-destructive font-medium">Warning:</span> This deviates from the firm's standard playbook which requires a 12-month cap for Tier-1 enterprise clients like Global Logistics <sup className="text-primary font-bold cursor-pointer hover:underline">[2]</sup>.
-                    
-                    {/* Sources Drawer */}
-                    <div className="mt-4 p-3 bg-black/40 rounded-lg border border-border">
-                      <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground mb-2">
-                        <BookOpen className="w-3.5 h-3.5" /> SOURCES
+              ) : (
+                messages.map((msg, index) => {
+                  const isUser = msg.role === "user";
+                  return (
+                    <motion.div 
+                      key={index}
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className={`flex flex-col gap-2 ${isUser ? "items-end" : "items-start"}`}
+                    >
+                      {/* Avatar Row */}
+                      <div className="flex items-center gap-2">
+                        {!isUser && (
+                          <div className="w-6 h-6 rounded bg-[#7C3AED]/20 flex items-center justify-center border border-[#7C3AED]/30">
+                            <Sparkles className="w-3.5 h-3.5 text-[#7C3AED]" />
+                          </div>
+                        )}
+                        <span className={`text-xs font-medium ${isUser ? "text-muted-foreground" : "text-foreground font-semibold uppercase tracking-wider"}`}>
+                          {isUser ? user?.name || "User" : "LexAI"}
+                        </span>
+                        {isUser && (
+                          <div className="w-6 h-6 rounded bg-elevated flex items-center justify-center border border-border text-[10px] font-bold">
+                            {user?.name ? getInitials(user.name) : "US"}
+                          </div>
+                        )}
                       </div>
-                      <ul className="space-y-2">
-                        <li className="text-[11px] flex gap-2">
-                          <span className="text-primary font-bold">[1]</span>
-                          <span className="text-muted-foreground font-mono">Master_Service_Agreement_v4.pdf (Page 3)</span>
-                        </li>
-                        <li className="text-[11px] flex gap-2">
-                          <span className="text-primary font-bold">[2]</span>
-                          <span className="text-muted-foreground font-mono">Firm_Playbook_v2.1.docx (Liability Caps, Sec 3.b)</span>
-                        </li>
-                      </ul>
-                    </div>
+                      
+                      {/* Message Content */}
+                      {isUser ? (
+                        <div className="bg-[#1A2235] border border-border p-4 rounded-xl rounded-tr-none text-sm text-foreground shadow-sm max-w-[85%] font-sans whitespace-pre-wrap">
+                          {msg.content}
+                        </div>
+                      ) : (
+                        <div className="ai-glow rounded-xl rounded-tl-none mt-1 w-full">
+                          <div className="glass-panel p-4 rounded-xl rounded-tl-none text-sm leading-relaxed text-foreground/90 font-sans whitespace-pre-wrap min-h-12">
+                            {msg.content || (isStreaming && index === messages.length - 1 ? <TypingDots /> : "")}
+                            
+                            {/* Sources (only show on last assistant msg if sources exist) */}
+                            {!isStreaming && index === messages.length - 1 && sources.length > 0 && (
+                              <div className="mt-4 p-3 bg-black/40 rounded-lg border border-border">
+                                <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground mb-2">
+                                  <BookOpen className="w-3.5 h-3.5" /> SOURCES
+                                </div>
+                                <ul className="space-y-2">
+                                  {sources.map((src, i) => (
+                                    <li key={i} className="text-[11px] flex gap-2">
+                                      <span className="text-primary font-bold">[{i+1}]</span>
+                                      <span className="text-muted-foreground font-mono">{src.document_name} {src.page ? `(Page ${src.page})` : ""}</span>
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
 
-                    {/* Action Buttons (Accept/Reject) */}
-                    <div className="flex items-center gap-2 mt-4">
-                      <Button size="sm" className="bg-success/20 hover:bg-success/30 text-success border border-success/30 h-8 text-xs font-semibold px-3">
-                        Accept Edit
-                      </Button>
-                      <Button size="sm" variant="ghost" className="hover:bg-danger/10 text-danger border border-transparent hover:border-danger/20 h-8 text-xs font-semibold px-3">
-                        Reject
-                      </Button>
-                    </div>
-
-                    {/* Feedback */}
-                    <div className="flex items-center justify-end gap-2 mt-4 pt-3 border-t border-border/50">
-                      <button className="p-1.5 text-muted-foreground hover:text-success hover:bg-success/10 rounded transition-colors">
-                        <ThumbsUp className="w-4 h-4" />
-                      </button>
-                      <button className="p-1.5 text-muted-foreground hover:text-danger hover:bg-danger/10 rounded transition-colors">
-                        <ThumbsDown className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </div>
+                            {/* Feedback */}
+                            {!isStreaming && (
+                              <div className="flex items-center justify-end gap-2 mt-4 pt-3 border-t border-border/50">
+                                <button className="p-1.5 text-muted-foreground hover:text-success hover:bg-success/10 rounded transition-colors">
+                                  <ThumbsUp className="w-4 h-4" />
+                                </button>
+                                <button className="p-1.5 text-muted-foreground hover:text-danger hover:bg-danger/10 rounded transition-colors">
+                                  <ThumbsDown className="w-4 h-4" />
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </motion.div>
+                  );
+                })
+              )}
+              
+              {/* AI Error */}
+              {error && (
+                <div className="text-red-400 text-sm text-center p-2 bg-red-400/10 rounded-lg">
+                  {error}
                 </div>
-              </motion.div>
-
-              {/* User Message */}
-              <motion.div 
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.2 }}
-                className="flex flex-col gap-2 items-end"
-              >
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-medium text-muted-foreground">Atty. Yilmaz</span>
-                  <div className="w-6 h-6 rounded bg-elevated flex items-center justify-center border border-border text-[10px] font-bold">
-                    YI
-                  </div>
-                </div>
-                <div className="bg-[#1A2235] border border-border p-4 rounded-xl rounded-tr-none text-sm text-foreground shadow-sm max-w-[85%] font-sans">
-                  Draft a revision for Section 4.2 that aligns with the 12-month playbook standard. Maintain the carve-outs for gross negligence.
-                </div>
-              </motion.div>
-
-              {/* AI Typing Indicator */}
-              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.6 }} className="flex items-start gap-2">
-                <div className="w-6 h-6 rounded bg-[#7C3AED]/20 flex items-center justify-center border border-[#7C3AED]/30 shrink-0">
-                  <Sparkles className="w-3.5 h-3.5 text-[#7C3AED]" />
-                </div>
-                <div className="pt-1">
-                  <TypingDots />
-                  <span className="text-[10px] text-muted-foreground mt-1 ml-1 block uppercase tracking-widest font-mono">Drafting Clause...</span>
-                </div>
-              </motion.div>
-
+              )}
             </div>
-          </ScrollArea>
+          </div>
 
           {/* Input Area */}
           <div className="p-4 glass-panel rounded-none border-x-0 border-b-0 shrink-0">
@@ -258,13 +270,15 @@ export default function AICanvasPage() {
                 rows={2}
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
+                onKeyDown={handleKeyDown}
+                disabled={isStreaming}
               />
               
               <div className="flex items-center justify-between pt-2 border-t border-border/50 px-1">
                 <div className="flex items-center gap-1">
                   <Tooltip>
                     {/* @ts-ignore */}
-<TooltipTrigger asChild>
+                    <TooltipTrigger asChild>
                       <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-primary rounded-lg">
                         <Paperclip className="w-4 h-4" />
                       </Button>
@@ -273,7 +287,7 @@ export default function AICanvasPage() {
                   </Tooltip>
                   <Tooltip>
                     {/* @ts-ignore */}
-<TooltipTrigger asChild>
+                    <TooltipTrigger asChild>
                       <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-primary rounded-lg">
                         <BookOpen className="w-4 h-4" />
                       </Button>
@@ -282,7 +296,12 @@ export default function AICanvasPage() {
                   </Tooltip>
                 </div>
 
-                <Button size="icon" className="shrink-0 rounded-lg h-8 w-8 bg-[#7C3AED] hover:bg-[#7C3AED]/90 text-white btn-scale">
+                <Button 
+                  size="icon" 
+                  className="shrink-0 rounded-lg h-8 w-8 bg-[#7C3AED] hover:bg-[#7C3AED]/90 text-white btn-scale"
+                  onClick={handleSend}
+                  disabled={!input.trim() || isStreaming}
+                >
                   <Send className="w-4 h-4" />
                 </Button>
               </div>

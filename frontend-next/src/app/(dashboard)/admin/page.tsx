@@ -17,11 +17,11 @@ export default function AdminPage() {
 
       <Tabs defaultValue="users" className="flex-1 flex flex-col">
         <TabsList className="bg-elevated border border-border self-start mb-6 h-12 p-1">
-          <TabsTrigger value="users" className="data-[state=active]:bg-surface data-[state=active]:text-primary h-full px-6 flex items-center gap-2"><Users className="w-4 h-4"/> Users</TabsTrigger>
-          <TabsTrigger value="ai" className="data-[state=active]:bg-surface data-[state=active]:text-primary h-full px-6 flex items-center gap-2"><Settings className="w-4 h-4"/> AI Config</TabsTrigger>
-          <TabsTrigger value="security" className="data-[state=active]:bg-surface data-[state=active]:text-primary h-full px-6 flex items-center gap-2"><Shield className="w-4 h-4"/> Security</TabsTrigger>
-          <TabsTrigger value="billing" className="data-[state=active]:bg-surface data-[state=active]:text-primary h-full px-6 flex items-center gap-2"><CreditCard className="w-4 h-4"/> Billing</TabsTrigger>
-          <TabsTrigger value="integrations" className="data-[state=active]:bg-surface data-[state=active]:text-primary h-full px-6 flex items-center gap-2"><Plug className="w-4 h-4"/> Integrations</TabsTrigger>
+          <TabsTrigger value="users" className="data-[state=active]:bg-surface data-[state=active]:text-primary h-full px-6 flex items-center gap-2"><Users className="w-4 h-4" /> Users</TabsTrigger>
+          <TabsTrigger value="ai" className="data-[state=active]:bg-surface data-[state=active]:text-primary h-full px-6 flex items-center gap-2"><Settings className="w-4 h-4" /> AI Config</TabsTrigger>
+          <TabsTrigger value="security" className="data-[state=active]:bg-surface data-[state=active]:text-primary h-full px-6 flex items-center gap-2"><Shield className="w-4 h-4" /> Security</TabsTrigger>
+          <TabsTrigger value="billing" className="data-[state=active]:bg-surface data-[state=active]:text-primary h-full px-6 flex items-center gap-2"><CreditCard className="w-4 h-4" /> Billing</TabsTrigger>
+          <TabsTrigger value="integrations" className="data-[state=active]:bg-surface data-[state=active]:text-primary h-full px-6 flex items-center gap-2"><Plug className="w-4 h-4" /> Integrations</TabsTrigger>
         </TabsList>
 
         <div className="flex-1 overflow-auto">
@@ -33,7 +33,7 @@ export default function AdminPage() {
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                   <Input placeholder="Search users by name or email..." className="pl-9 w-[400px] bg-surface" />
                 </div>
-                <Button className="bg-primary text-white"><Plus className="w-4 h-4 mr-2"/> Invite User</Button>
+                <Button className="bg-primary text-white"><Plus className="w-4 h-4 mr-2" /> Invite User</Button>
               </div>
 
               <div className="border border-border rounded-lg bg-surface overflow-hidden">
@@ -130,7 +130,7 @@ export default function AdminPage() {
               </Card>
             </motion.div>
           </TabsContent>
-          
+
           {/* SECURITY TAB */}
           <TabsContent value="security" className="m-0 h-full">
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col gap-6">

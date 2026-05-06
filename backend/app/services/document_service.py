@@ -77,18 +77,20 @@ class DocumentService:
             from app.services.retrieval_service import retrieval_service
             indexed = await retrieval_service.index_chunks(chunks)
 
+            from sqlalchemy import text
             async with SessionLocal() as db:
                 await db.execute(
-                    "UPDATE documents SET status = 'indexed', chunk_count = :count WHERE id = :id",
+                    text("UPDATE documents SET status = 'indexed', chunk_count = :count WHERE id = :id"),
                     {"count": indexed, "id": doc_id}
                 )
                 await db.commit()
                 
             logger.info(f"[DocService] {filename} → {indexed} chunk indekslendi")
         except Exception as e:
+            from sqlalchemy import text
             async with SessionLocal() as db:
                 await db.execute(
-                    "UPDATE documents SET status = 'error' WHERE id = :id",
+                    text("UPDATE documents SET status = 'error' WHERE id = :id"),
                     {"id": doc_id}
                 )
                 await db.commit()
