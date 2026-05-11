@@ -2,14 +2,12 @@
 LLM Service — OpenAI / local LLM çağrıları
 """
 import re
-import torch
 import asyncio
 from typing import Optional
 from app.core.config import settings
 from app.core.logger import get_logger
 
 logger = get_logger(__name__)
-
 
 class LLMService:
     def __init__(self):
@@ -25,6 +23,7 @@ class LLMService:
 
     def _load_local_model(self):
         if self._local_model is None:
+            import torch
             from transformers import AutoModelForCausalLM, AutoTokenizer
             logger.info(f"[LLM] Yerel model yükleniyor: {settings.LLM_LOCAL_MODEL_PATH}")
             self._local_tokenizer = AutoTokenizer.from_pretrained(settings.LLM_LOCAL_MODEL_PATH)
@@ -70,6 +69,7 @@ class LLMService:
 
     async def _complete_local(self, prompt: str, system: Optional[str] = None) -> str:
         try:
+            import torch
             model, tokenizer = await asyncio.to_thread(self._load_local_model)
             
             # Basit chat formatı (TinyLlama ve benzerleri için)

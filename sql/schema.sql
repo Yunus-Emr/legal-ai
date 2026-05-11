@@ -115,3 +115,10 @@ CREATE TABLE IF NOT EXISTS record_metadata (
     extraction_date TIMESTAMP,
     created_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
+
+-- ── System Config ───────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS system_config (
+    key VARCHAR(100) PRIMARY KEY,
+    value JSONB NOT NULL,
+    updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+);

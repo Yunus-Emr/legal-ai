@@ -77,8 +77,8 @@ async def update_user(
     return {"updated": user_id}
 
 
-# ── System Config ──────────────────────────────────────────────────────────
-_config_store: Dict[str, Any] = {
+# ── System Config ───────────────────────────────────────────
+DEFAULT_CONFIG = {
     "llm_model": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
     "llm_provider": "huggingface",
     "temperature": 0.1,
@@ -89,18 +89,33 @@ _config_store: Dict[str, Any] = {
     "embedding_model": "intfloat/e5-large",
 }
 
-
 @router.get("/config")
-async def get_config(admin: User = Depends(require_admin)):
-    return _config_store
-
+async def get_config(admin: User = Depends(require_admin), db: AsyncSession = Depends(get_db)):
+    from app.db.models import SystemConfig
+    result = await db.execute(select(SystemConfig))
+    configs = result.scalars().all()
+    
+    config_dict = DEFAULT_CONFIG.copy()
+    for c in configs:
+        config_dict[c.key] = c.value
+        
+    return config_dict
 
 class ConfigUpdate(BaseModel):
     values: Dict[str, Any]
 
-
 @router.post("/config")
-async def update_config(body: ConfigUpdate, admin: User = Depends(require_admin)):
-    _config_store.update(body.values)
+async def update_config(body: ConfigUpdate, admin: User = Depends(require_admin), db: AsyncSession = Depends(get_db)):
+    from app.db.models import SystemConfig
+    from sqlalchemy.dialects.postgresql import insert
+    
+    for key, value in body.values.items():
+        stmt = insert(SystemConfig).values(key=key, value=value)
+        stmt = stmt.on_conflict_do_update(
+            index_elements=['key'],
+            set_=dict(value=stmt.excluded.value)
+        )
+        await db.execute(stmt)
+        
+    await db.commit()
     return {"updated": list(body.values.keys())}
-

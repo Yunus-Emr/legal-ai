@@ -64,7 +64,7 @@ class DocumentService:
             await db.commit()
 
         # Save to disk
-        raw_dir = "/home/yunus/TestFolder/legal-ai/data/raw_pdfs"
+        raw_dir = os.getenv("DATA_DIR", "/app/data/raw_pdfs")
         os.makedirs(raw_dir, exist_ok=True)
         filepath = os.path.join(raw_dir, f"{doc_id}.pdf")
         with open(filepath, "wb") as f:

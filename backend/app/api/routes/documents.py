@@ -90,7 +90,7 @@ async def get_document_status(doc_id: str, current_user: User = Depends(get_curr
 @router.get("/documents/{doc_id}/download")
 async def download_document(doc_id: str, current_user: User = Depends(get_current_user)):
     import os
-    filepath = f"/home/yunus/TestFolder/legal-ai/data/raw_pdfs/{doc_id}.pdf"
+    filepath = os.path.join(os.getenv("DATA_DIR", "/app/data/raw_pdfs"), f"{doc_id}.pdf")
     if not os.path.exists(filepath):
         raise HTTPException(status_code=404, detail="Doküman diske kaydedilmemiş")
     return FileResponse(filepath, media_type="application/pdf", filename=f"{doc_id}.pdf")

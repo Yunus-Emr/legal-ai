@@ -8,12 +8,28 @@ from app.api.routes import chat, documents, search, health, auth, drafts, analyt
 
 logger = get_logger(__name__)
 
+from contextlib import asynccontextmanager
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    logger.info("🚀 Legal AI API başlatılıyor...")
+    logger.info(f"   Environment: {settings.ENV}")
+    logger.info(f"   Debug:       {settings.DEBUG}")
+    try:
+        from app.services.retrieval_service import retrieval_service
+        await retrieval_service.ensure_index()
+    except Exception as exc:
+        logger.warning(f"OpenSearch index ensure atlandı: {exc}")
+    yield
+    logger.info("🛑 Legal AI API kapatılıyor...")
+
 app = FastAPI(
     title="Legal AI API",
     description="RAG-destekli hukuki doküman soru-cevap sistemi",
     version="1.0.0",
     docs_url="/docs",
     redoc_url="/redoc",
+    lifespan=lifespan,
 )
 
 # ── Middleware ──────────────────────────────────────────────────
@@ -37,20 +53,6 @@ app.include_router(admin.router, prefix="/api/v1/admin", tags=["Admin"])
 app.include_router(ws.router, tags=["WebSocket"])
 
 # ── Startup / Shutdown ──────────────────────────────────────────
-@app.on_event("startup")
-async def on_startup():
-    logger.info("🚀 Legal AI API başlatılıyor...")
-    logger.info(f"   Environment: {settings.ENV}")
-    logger.info(f"   Debug:       {settings.DEBUG}")
-    try:
-        from app.services.retrieval_service import retrieval_service
-        await retrieval_service.ensure_index()
-    except Exception as exc:
-        logger.warning(f"OpenSearch index ensure atlandı: {exc}")
-
-@app.on_event("shutdown")
-async def on_shutdown():
-    logger.info("🛑 Legal AI API kapatılıyor...")
 
 @app.get("/")
 async def root():
