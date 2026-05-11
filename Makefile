@@ -3,7 +3,7 @@
 setup:
 	@echo "Setting up Legal AI project..."
 	cd backend && pip install -r requirements.txt
-	cd frontend && npm install
+	cd frontend-next && npm install
 
 run-backend:
 	@echo "Starting FastAPI RAG server..."
@@ -14,8 +14,8 @@ start-opensearch:
 	docker-compose up -d opensearch
 
 run-frontend:
-	@echo "Starting React Vite server..."
-	cd frontend && npm run dev
+	@echo "Starting Next.js frontend server..."
+	cd frontend-next && npm run dev
 
 seed:
 	@echo "Running initial DB seed script (assumes SQL setup)..."

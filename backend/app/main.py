@@ -42,6 +42,11 @@ async def on_startup():
     logger.info("🚀 Legal AI API başlatılıyor...")
     logger.info(f"   Environment: {settings.ENV}")
     logger.info(f"   Debug:       {settings.DEBUG}")
+    try:
+        from app.services.retrieval_service import retrieval_service
+        await retrieval_service.ensure_index()
+    except Exception as exc:
+        logger.warning(f"OpenSearch index ensure atlandı: {exc}")
 
 @app.on_event("shutdown")
 async def on_shutdown():

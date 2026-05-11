@@ -2,7 +2,10 @@
 Retrieval Service — OpenSearch / FAISS vektör arama
 """
 from typing import List, Dict, Any, Optional
+from sqlalchemy import select
 from app.core.config import settings
+from app.db.models import RecordMetadata
+from app.db.postgres import SessionLocal
 from app.services.embedding_service import embedding_service
 from app.core.logger import get_logger
 
@@ -10,6 +13,10 @@ logger = get_logger(__name__)
 
 
 class RetrievalService:
+    async def ensure_index(self) -> None:
+        from app.vectorstore.opensearch_client import opensearch_client
+        await opensearch_client.ensure_index()
+
     async def search(
         self,
         query: str,
@@ -31,9 +38,10 @@ class RetrievalService:
         """Vektör ile OpenSearch kNN araması yapar. FAISS fallback."""
         try:
             from app.vectorstore.opensearch_client import opensearch_client
-            return await opensearch_client.knn_search(
+            hits = await opensearch_client.knn_search(
                 vector=vector, top_k=top_k, filter_doc_ids=filter_doc_ids
             )
+            return await self._enrich_hits_with_metadata(hits)
         except Exception as e:
             logger.warning(f"[Retrieval] OpenSearch bağlanamadı: {e}. FAISS fallback")
             try:
@@ -45,6 +53,10 @@ class RetrievalService:
 
     async def index_chunks(self, chunks: List[Dict[str, Any]]) -> int:
         """Chunk listesini embed edip indeksler. İndekslenen chunk sayısını döner."""
+        if not chunks:
+            return 0
+
+        await self.ensure_index()
         texts = [c["text"] for c in chunks]
         vectors = await embedding_service.embed_batch(texts, is_query=False)
 
@@ -59,6 +71,39 @@ class RetrievalService:
             logger.warning(f"[Retrieval] OpenSearch index hatası: {e}")
 
         return len(docs)
+
+    async def _enrich_hits_with_metadata(self, hits: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        chunk_ids = [h.get("chunk_id") for h in hits if h.get("chunk_id")]
+        if not chunk_ids:
+            return hits
+
+        async with SessionLocal() as db:
+            result = await db.execute(
+                select(RecordMetadata).where(RecordMetadata.id.in_(chunk_ids))
+            )
+            rows = result.scalars().all()
+
+        metadata_by_id = {
+            row.id: {
+                "article": row.article,
+                "section": row.section,
+                "law_name": row.law_name,
+                "kanun_no": row.kanun_no,
+                "source_file": row.source_file,
+            }
+            for row in rows
+        }
+
+        enriched: List[Dict[str, Any]] = []
+        for hit in hits:
+            meta = metadata_by_id.get(hit.get("chunk_id"), {})
+            if meta:
+                existing = hit.get("metadata") or {}
+                hit["metadata"] = {**existing, **meta}
+                if not hit.get("document_name"):
+                    hit["document_name"] = meta.get("source_file")
+            enriched.append(hit)
+        return enriched
 
 
 retrieval_service = RetrievalService()

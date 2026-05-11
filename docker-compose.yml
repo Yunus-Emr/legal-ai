@@ -1,4 +1,3 @@
-version: "3.9"
 
 services:
   # ── FastAPI Backend ─────────────────────────────────────────
@@ -9,11 +8,12 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - ENV=production
-      - DEBUG=false
+      - ENV=development
+      - DEBUG=true
       - POSTGRES_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/legalai
       - OPENSEARCH_HOST=opensearch
       - OPENSEARCH_PORT=9200
+      - CORS_ORIGINS=["http://localhost:3000","http://frontend-next:3000"]
     env_file:
       - .env
     depends_on:
@@ -23,6 +23,7 @@ services:
         condition: service_healthy
     volumes:
       - ./data:/app/data
+      - ./backend:/app
     restart: unless-stopped
 
   # ── PostgreSQL ──────────────────────────────────────────────
@@ -78,18 +79,21 @@ services:
     profiles:
       - monitoring
 
-  # ── Frontend (production build) ─────────────────────────────
-  frontend:
+  frontend-next:
     build:
-      context: ./frontend
+      context: ./frontend-next
       dockerfile: Dockerfile
     ports:
-      - "80:80"
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
+    volumes:
+      - ./frontend-next:/app
+      - /app/node_modules
+      - /app/.next
     depends_on:
       - backend
     restart: unless-stopped
-    profiles:
-      - production
 
 volumes:
   postgres_data:

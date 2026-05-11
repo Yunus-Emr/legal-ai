@@ -35,7 +35,7 @@ export default function LoginPage() {
         
         // 2) /me endpoint'inden kullanıcı bilgilerini al
         const meRes = await fetch(
-          `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/api/v1/auth/me`,
+          "/api/v1/auth/me",
           { headers: { Authorization: `Bearer ${data.access_token}` } }
         );
         const user = await meRes.json();
@@ -52,7 +52,7 @@ export default function LoginPage() {
         const { data } = await authApi.register({ name, email, password });
         
         const meRes = await fetch(
-          `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/api/v1/auth/me`,
+          "/api/v1/auth/me",
           { headers: { Authorization: `Bearer ${data.access_token}` } }
         );
         const user = await meRes.json();

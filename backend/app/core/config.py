@@ -1,5 +1,20 @@
 from pydantic_settings import BaseSettings
-from typing import List
+from typing import List, Union
+import json
+
+
+def parse_list(v: Union[str, List[str]]) -> List[str]:
+    """Hem JSON string hem de liste olarak gelen CORS_ORIGINS'i parse eder."""
+    if isinstance(v, list):
+        return v
+    try:
+        parsed = json.loads(v)
+        if isinstance(parsed, list):
+            return parsed
+    except (json.JSONDecodeError, TypeError):
+        pass
+    # Virgülle ayrılmış string
+    return [x.strip() for x in v.split(",") if x.strip()]
 
 
 class Settings(BaseSettings):
@@ -11,7 +26,10 @@ class Settings(BaseSettings):
 
     # API
     API_KEY: str = ""
-    CORS_ORIGINS: List[str] = ["http://localhost:3000", "http://localhost:5173"]
+    CORS_ORIGINS: Union[List[str], str] = [
+        "http://localhost:3000",
+        "http://localhost:5173",
+    ]
 
     # OpenAI / LLM
     OPENAI_API_KEY: str = ""
@@ -23,7 +41,7 @@ class Settings(BaseSettings):
     LLM_MAX_TOKENS: int = 1024
 
     # Embeddings
-    EMBEDDING_MODEL: str = "intfloat/e5-large"
+    EMBEDDING_MODEL: str = "intfloat/multilingual-e5-large"
     EMBEDDING_DIM: int = 1024
 
     # OpenSearch
@@ -45,6 +63,10 @@ class Settings(BaseSettings):
         env_file = ".env"
         env_file_encoding = "utf-8"
         extra = "ignore"
+
+    def model_post_init(self, __context) -> None:
+        if isinstance(self.CORS_ORIGINS, str):
+            object.__setattr__(self, "CORS_ORIGINS", parse_list(self.CORS_ORIGINS))
 
 
 settings = Settings()

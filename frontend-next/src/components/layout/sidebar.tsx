@@ -14,7 +14,6 @@ import {
   FileSignature,
   Edit3,
   ShieldCheck,
-  Users,
   MessageSquare,
   Globe,
   BarChart,
@@ -49,18 +48,9 @@ const NAVIGATION = [
     ],
   },
   {
-    category: "COLLABORATION",
-    items: [
-      { label: "Team Workspace", icon: Users, href: "/team" },
-      { label: "Comments", icon: MessageSquare, href: "/comments" },
-      { label: "Client Portal", icon: Globe, href: "/portal" },
-    ],
-  },
-  {
     category: "MANAGEMENT",
     items: [
       { label: "Analytics", icon: BarChart, href: "/analytics" },
-      { label: "Billing", icon: CreditCard, href: "/billing" },
       { label: "Settings", icon: Settings, href: "/settings" },
     ],
   },

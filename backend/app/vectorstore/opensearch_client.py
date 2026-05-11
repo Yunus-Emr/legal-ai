@@ -5,6 +5,7 @@ import asyncio
 from typing import List, Dict, Any, Optional
 from app.core.config import settings
 from app.core.logger import get_logger
+from app.vectorstore.schema import LEGAL_INDEX_MAPPING
 
 logger = get_logger(__name__)
 
@@ -85,6 +86,15 @@ class OpenSearchClient:
 
         await client.bulk(body=actions)
         logger.info(f"[OpenSearch] {len(docs)} doküman indekslendi")
+
+    async def ensure_index(self) -> None:
+        client = self._get_client()
+        if client is None:
+            raise RuntimeError("OpenSearch client yok")
+        exists = await client.indices.exists(index=settings.OPENSEARCH_INDEX)
+        if not exists:
+            await client.indices.create(index=settings.OPENSEARCH_INDEX, body=LEGAL_INDEX_MAPPING)
+            logger.info(f"[OpenSearch] Index oluşturuldu: {settings.OPENSEARCH_INDEX}")
 
     async def delete_by_doc_id(self, doc_id: str) -> None:
         client = self._get_client()
