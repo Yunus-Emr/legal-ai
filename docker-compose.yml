@@ -24,6 +24,14 @@ services:
     volumes:
       - ./data:/app/data
       - ./backend:/app
+      - ~/.cache/huggingface:/root/.cache/huggingface
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
     restart: unless-stopped
 
   # ── PostgreSQL ──────────────────────────────────────────────

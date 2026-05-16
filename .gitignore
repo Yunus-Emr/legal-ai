@@ -174,3 +174,4 @@ Thumbs.db
 data/raw_pdfs/*.pdf
 data/processed/
 !data/raw_pdfs/.gitkeep
+data/*

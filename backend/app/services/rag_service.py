@@ -9,6 +9,7 @@ from app.services.retrieval_service import retrieval_service
 from app.services.llm_service import llm_service
 from app.rag.pipeline import build_context
 from app.rag.reranker import reranker
+from app.core.config import settings
 from app.core.logger import get_logger
 
 logger = get_logger(__name__)
@@ -66,7 +67,9 @@ class RAGService:
         # 3. Re-rank (CrossEncoder if available, keyword fallback otherwise)
         if hits:
             hits = await _async_rerank(query, hits)
-            hits = hits[:5]  # Top-5 after reranking
+            # Yerel modeller için bağlamı daraltıyoruz (TinyLlama vb. 2048 token limitli)
+            k_limit = 3 if settings.LLM_PROVIDER == "huggingface" else 5
+            hits = hits[:k_limit]
 
         # 4. Build history string
         history_text = _format_history(history or [])
@@ -78,7 +81,9 @@ class RAGService:
             return {"answer": answer, "sources": []}
 
         # 5. Build context from hits
-        context = build_context(hits)
+        # Yerel model için max_tokens'ı düşür
+        context_limit = 1000 if settings.LLM_PROVIDER == "huggingface" else 2500
+        context = build_context(hits, max_tokens=context_limit)
 
         # 6. Build CoT prompt and call LLM
         prompt = LEGAL_COT_PROMPT.format(
