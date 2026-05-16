@@ -43,11 +43,13 @@ class ChatHistory(Base):
 class QueryLog(Base):
     __tablename__ = "query_logs"
     id = Column(String, primary_key=True)
-    session_id = Column(String, nullable=False)
+    session_id = Column(String, nullable=False, index=True)
     query = Column(Text, nullable=False)
     answer = Column(Text)
     response_time_ms = Column(Integer)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    # Hangi dokümanlar kaynak gösterildi — analytics/top-documents için
+    sources = Column(JSON, nullable=True)  # [{document_name, chunk_id, score}]
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
 
 class UserRole(Base):
     __tablename__ = "user_roles"
@@ -55,6 +57,9 @@ class UserRole(Base):
     role = Column(String, primary_key=True)
 
 class Session(Base):
+    """JWT kimlik doğrulama stateless olduğundan bu tablo kullanılmıyor.
+    Token blacklist gerekirse gelecekte aktif edilebilir.
+    """
     __tablename__ = "sessions"
     id = Column(String, primary_key=True)
     user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
@@ -108,3 +113,14 @@ class SystemConfig(Base):
     key = Column(String, primary_key=True)
     value = Column(JSON, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class PasswordResetToken(Base):
+    """Güvenli şifre sıfırlama tokenları (hash'lenmiş, tek kullanımlık, 15 dk geçerli)."""
+    __tablename__ = "password_reset_tokens"
+    id = Column(String, primary_key=True)
+    user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    token_hash = Column(String, nullable=False, unique=True)  # sha256 hash
+    expires_at = Column(DateTime, nullable=False)
+    used = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=datetime.utcnow)

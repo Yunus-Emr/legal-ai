@@ -1,6 +1,15 @@
 """
 Prompt Templates — Hukuki QA promptları
+
+DURUM: Bu dosyadaki promptlar artık kullanılmıyor.
+Aktif promptlar app/services/rag_service.py içinde LEGAL_COT_PROMPT ve NO_DOCS_PROMPT
+olarak tanımlıdır (conversational memory ve CoT destekli, daha gelişmiş versiyonlar).
+
+Bu dosya ilerideki refactoring için referans olarak tutulmaktadır.
+Yeni geliştirmelerde rag_service.py'deki promptları güncelleyin.
 """
+
+# ─── KULLANILMIYOR — Referans amaçlı bırakılmıştır ────────────────────────
 
 LEGAL_QA_PROMPT = """Sen uzman bir Türk hukuk asistanısın. Aşağıdaki hukuki doküman bölümlerine dayanarak kullanıcının sorusunu yanıtla.
 

@@ -1,5 +1,8 @@
 """
-RAG Pipeline — Context oluşturma ve orchestration
+RAG Pipeline — Context oluşturma
+
+NOT: rerank_hits() fonksiyonu kaldırıldı.
+     Reranking için app/rag/reranker.py::Reranker sınıfını kullanın.
 """
 from typing import List, Dict, Any
 
@@ -36,21 +39,3 @@ def build_context(hits: List[Dict[str, Any]], max_tokens: int = 3000) -> str:
             break
 
     return "\n\n---\n\n".join(parts)
-
-
-def rerank_hits(
-    hits: List[Dict[str, Any]],
-    query: str,
-) -> List[Dict[str, Any]]:
-    """
-    Basit keyword-based re-ranking. Üretimde CrossEncoder kullanın.
-    Sorgu kelimelerinin chunk'ta geçme sıklığına göre bonus puan ekler.
-    """
-    query_words = set(query.lower().split())
-
-    for hit in hits:
-        text_words = hit.get("text", "").lower().split()
-        keyword_hits = sum(1 for w in text_words if w in query_words)
-        hit["score"] = float(hit.get("score", 0)) + 0.01 * keyword_hits
-
-    return sorted(hits, key=lambda h: h["score"], reverse=True)

@@ -2,7 +2,7 @@
 FAISS Index — Local vektör arama (dev/test)
 """
 import os
-import pickle
+import json
 from typing import List, Dict, Any, Optional
 from app.core.config import settings
 from app.core.logger import get_logger
@@ -10,7 +10,8 @@ from app.core.logger import get_logger
 logger = get_logger(__name__)
 
 INDEX_PATH = "data/embeddings/faiss.index"
-META_PATH = "data/embeddings/faiss_meta.pkl"
+# JSON formatına geçildi — pickle güvenlik açığı (RCE) barındırıyordu
+META_PATH = "data/embeddings/faiss_meta.json"
 
 
 class FAISSIndex:
@@ -25,8 +26,9 @@ class FAISSIndex:
             import faiss
             if os.path.exists(INDEX_PATH):
                 self._index = faiss.read_index(INDEX_PATH)
-                with open(META_PATH, "rb") as f:
-                    self._metadata = pickle.load(f)
+                if os.path.exists(META_PATH):
+                    with open(META_PATH, "r", encoding="utf-8") as f:
+                        self._metadata = json.load(f)
                 logger.info(f"[FAISS] Index yüklendi: {self._index.ntotal} vektör")
             else:
                 self._index = faiss.IndexFlatIP(dim)  # Inner product = cosine on unit vecs
@@ -37,7 +39,6 @@ class FAISSIndex:
 
     def add(self, docs: List[Dict[str, Any]]) -> None:
         import numpy as np
-        import faiss
         dim = len(docs[0]["embedding"])
         idx = self._load_or_create(dim)
         if idx is None:
@@ -50,6 +51,7 @@ class FAISSIndex:
 
         self._save()
         logger.info(f"[FAISS] {len(docs)} vektör eklendi")
+
 
     def search(
         self, vector: List[float], top_k: int = 5
@@ -74,8 +76,9 @@ class FAISSIndex:
         import faiss
         os.makedirs(os.path.dirname(INDEX_PATH), exist_ok=True)
         faiss.write_index(self._index, INDEX_PATH)
-        with open(META_PATH, "wb") as f:
-            pickle.dump(self._metadata, f)
+        # JSON ile kaydet — pickle yerine güvenli format
+        with open(META_PATH, "w", encoding="utf-8") as f:
+            json.dump(self._metadata, f, ensure_ascii=False)
 
 
 faiss_index = FAISSIndex()

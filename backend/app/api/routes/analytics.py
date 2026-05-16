@@ -69,21 +69,22 @@ async def get_top_documents(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """En çok sorgulanan dokümanları döner (query_logs'dan join ile)."""
+    """En çok kaynak gösterilen dokümanları query_logs.sources'dan çeker."""
     result = await db.execute(text("""
         SELECT
-            d.filename,
-            COUNT(ql.id) as query_count
-        FROM documents d
-        LEFT JOIN query_logs ql ON ql.session_id IN (
-            SELECT DISTINCT session_id FROM chat_history WHERE user_id = :uid
-        )
-        GROUP BY d.filename
-        ORDER BY query_count DESC
+            src->>'document_name' as document_name,
+            COUNT(*) as citation_count,
+            AVG((src->>'score')::float) as avg_score
+        FROM query_logs,
+             jsonb_array_elements(sources::jsonb) as src
+        WHERE sources IS NOT NULL
+          AND created_at >= NOW() - INTERVAL '30 days'
+        GROUP BY src->>'document_name'
+        ORDER BY citation_count DESC
         LIMIT 10
-    """), {"uid": current_user.id})
+    """))
     rows = result.fetchall()
-    return [{"name": r[0], "queries": r[1]} for r in rows]
+    return [{"name": r[0], "citations": r[1], "avg_score": round(float(r[2] or 0), 3)} for r in rows]
 
 
 @router.get("/response-time")

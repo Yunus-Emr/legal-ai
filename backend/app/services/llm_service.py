@@ -25,14 +25,26 @@ class LLMService:
         if self._local_model is None:
             import torch
             from transformers import AutoModelForCausalLM, AutoTokenizer
-            logger.info(f"[LLM] Yerel model yükleniyor: {settings.LLM_LOCAL_MODEL_PATH}")
+
+            # CUDA erişilebilirlik kontrolü — GPU yoksa CPU'ya düş
+            device = settings.LLM_DEVICE
+            if device == "cuda" and not torch.cuda.is_available():
+                logger.warning("[LLM] CUDA isteği yapıldı ama GPU bulunamadı — CPU'ya düşülüyor")
+                device = "cpu"
+            elif device == "cuda":
+                gpu_name = torch.cuda.get_device_name(0)
+                logger.info(f"[LLM] GPU bulundu: {gpu_name}")
+
+            logger.info(f"[LLM] Yerel model yükleniyor: {settings.LLM_LOCAL_MODEL_PATH} (device={device})")
             self._local_tokenizer = AutoTokenizer.from_pretrained(settings.LLM_LOCAL_MODEL_PATH)
             self._local_model = AutoModelForCausalLM.from_pretrained(
                 settings.LLM_LOCAL_MODEL_PATH,
-                torch_dtype=torch.float32 if settings.LLM_DEVICE == "cpu" else torch.float16,
-                device_map=settings.LLM_DEVICE
+                torch_dtype=torch.float32 if device == "cpu" else torch.float16,
+                device_map=device
             )
-            logger.info(f"[LLM] Yerel model başarıyla yüklendi ({settings.LLM_DEVICE})")
+            # Gerçek device'ı kaydet (fallback durumunda değişmiş olabilir)
+            self._effective_device = device
+            logger.info(f"[LLM] Yerel model başarıyla yüklendi ({device})")
         return self._local_model, self._local_tokenizer
 
     async def complete(self, prompt: str, system: Optional[str] = None) -> str:
@@ -67,15 +79,45 @@ class LLMService:
             logger.error(f"[LLM] OpenAI hatası: {e}")
             return self._dummy_response(prompt)
 
+    async def stream_openai(self, prompt: str, system: Optional[str] = None):
+        """OpenAI üzerinden gerçek token-by-token streaming generator."""
+        client = self._get_openai_client()
+        if client is None:
+            yield self._dummy_response(prompt)
+            return
+
+        messages = []
+        if system:
+            messages.append({"role": "system", "content": system})
+        messages.append({"role": "user", "content": prompt})
+
+        try:
+            stream = await client.chat.completions.create(
+                model=settings.LLM_MODEL,
+                messages=messages,
+                temperature=settings.LLM_TEMPERATURE,
+                max_tokens=settings.LLM_MAX_TOKENS,
+                stream=True,
+            )
+            async for chunk in stream:
+                delta = chunk.choices[0].delta.content
+                if delta:
+                    yield delta
+        except Exception as e:
+            logger.error(f"[LLM] OpenAI streaming hatası: {e}")
+            yield self._dummy_response(prompt)
+
     async def _complete_local(self, prompt: str, system: Optional[str] = None) -> str:
         try:
             import torch
             model, tokenizer = await asyncio.to_thread(self._load_local_model)
-            
+            # Gerçek cihazı kullan (CUDA fallback sonrası değişmiş olabilir)
+            effective_device = getattr(self, "_effective_device", settings.LLM_DEVICE)
+
             # Basit chat formatı (TinyLlama ve benzerleri için)
             full_prompt = f"<|system|>\n{system or 'Sen yardımcı bir asistanısın.'}</s>\n<|user|>\n{prompt}</s>\n<|assistant|>\n"
-            
-            inputs = tokenizer(full_prompt, return_tensors="pt").to(settings.LLM_DEVICE)
+
+            inputs = tokenizer(full_prompt, return_tensors="pt").to(effective_device)
             
             with torch.no_grad():
                 outputs = await asyncio.to_thread(

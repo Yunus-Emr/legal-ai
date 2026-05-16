@@ -17,11 +17,32 @@ _connections: dict[str, WebSocket] = {}
 async def ws_chat(websocket: WebSocket, session_id: str):
     """
     Chat WebSocket — istemci bağlanır, mesaj gönderir, yanıt alır.
+    Auth: ws://host/ws/chat/{session_id}?token={jwt_access_token}
     Mesaj formatı: { "type": "message", "query": "..." }
     """
+    # ── JWT Doğrulama ────────────────────────────────────────
+    token = websocket.query_params.get("token")
+    if not token:
+        await websocket.close(code=1008, reason="Unauthorized: token gerekli")
+        return
+    try:
+        from jose import jwt as _jwt, JWTError
+        from app.services.auth_service import SECRET_KEY, ALGORITHM
+        payload = _jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        if payload.get("type") == "refresh":
+            raise ValueError("Refresh token ile WS auth olmaz")
+        ws_user_id = payload.get("sub")
+        if not ws_user_id:
+            raise ValueError("sub claim yok")
+    except Exception as e:
+        logger.warning(f"[WS] Geçersiz token: {e}")
+        await websocket.close(code=1008, reason="Unauthorized: geçersiz token")
+        return
+    # ─────────────────────────────────────────────────────────
+
     await websocket.accept()
     _connections[session_id] = websocket
-    logger.info(f"[WS] Bağlantı: {session_id}")
+    logger.info(f"[WS] Bağlantı: {session_id} user={ws_user_id}")
 
     try:
         while True:
@@ -41,7 +62,6 @@ async def ws_chat(websocket: WebSocket, session_id: str):
                 if not query:
                     continue
 
-                # Send typing indicator
                 await websocket.send_json({"type": "typing", "session_id": session_id})
 
                 try:
@@ -63,58 +83,47 @@ async def ws_chat(websocket: WebSocket, session_id: str):
         _connections.pop(session_id, None)
 
 
+
 @router.websocket("/ws/processing/{doc_id}")
 async def ws_processing(websocket: WebSocket, doc_id: str):
     """
-    Doküman işleme durumu WebSocket.
-    Sunucu, belge chunk → embed → index tamamlanana kadar progress event'leri gönderir.
+    Belge işleme durumu için WebSocket.
+    DB üzerinden document statüsünü anlık olarak okur.
     """
     await websocket.accept()
-    logger.info(f"[WS-Processing] Bağlantı: {doc_id}")
+    logger.info(f"[WS] Processing izleme: {doc_id}")
+    
+    from app.services.document_service import document_service
+    import asyncio
 
     try:
-        # Poll document status from DB every second and push updates
-        from app.services.document_service import document_service
-        stages = [
-            ("parsing",   10, 0.5),
-            ("chunking",  30, 0.8),
-            ("embedding", 60, 1.5),
-            ("indexing",  85, 1.0),
-        ]
+        while True:
+            status_data = await document_service.get_status(doc_id)
+            if not status_data:
+                await websocket.send_json({"progress": 100, "status": "not_found", "message": "Doküman bulunamadı"})
+                break
 
-        for stage, progress, delay in stages:
-            await websocket.send_json({
-                "type": "progress",
-                "doc_id": doc_id,
-                "stage": stage,
-                "progress": progress,
-            })
-            await asyncio.sleep(delay)
-
-        # Check actual status
-        status = await document_service.get_status(doc_id)
-        if status:
-            final_stage = status.get("status", "done")
-            await websocket.send_json({
-                "type": "complete",
-                "doc_id": doc_id,
-                "stage": final_stage,
-                "progress": 100,
-                "chunk_count": status.get("chunk_count", 0),
-            })
-        else:
-            await websocket.send_json({
-                "type": "complete",
-                "doc_id": doc_id,
-                "stage": "done",
-                "progress": 100,
-            })
-
+            status = status_data["status"]
+            if status == "processing":
+                await websocket.send_json({"progress": 50, "status": "processing", "message": "İşleniyor..."})
+            elif status == "indexed":
+                await websocket.send_json({
+                    "progress": 100, 
+                    "status": "indexed", 
+                    "message": "Tamamlandı",
+                    "chunk_count": status_data.get("chunk_count", 0)
+                })
+                break
+            elif status == "error":
+                await websocket.send_json({"progress": 100, "status": "error", "message": "Hata oluştu"})
+                break
+            
+            await asyncio.sleep(1.0)
     except WebSocketDisconnect:
-        logger.info(f"[WS-Processing] Bağlantı kesildi: {doc_id}")
+        logger.info(f"[WS] İzleme bağlantısı koptu: {doc_id}")
     except Exception as e:
-        logger.error(f"[WS-Processing] Hata: {e}")
+        logger.warning(f"[WS] İzleme bağlantısı hatası: {e}")
         try:
-            await websocket.send_json({"type": "error", "doc_id": doc_id, "message": str(e)})
+            await websocket.close()
         except Exception:
             pass

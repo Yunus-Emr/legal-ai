@@ -30,35 +30,29 @@ export default function LoginPage() {
 
     try {
       if (mode === "login") {
-        // 1) Backend'den token al
+        // 1) Login — backend httpOnly cookie'yi otomatik set ediyor
         const { data } = await authApi.login({ email, password });
-        
-        // 2) /me endpoint'inden kullanıcı bilgilerini al
-        const meRes = await fetch(
-          "/api/v1/auth/me",
-          { headers: { Authorization: `Bearer ${data.access_token}` } }
-        );
-        const user = await meRes.json();
-        
-        // 3) Zustand store + localStorage'a kaydet
-        setAuth(data.access_token, user);
-        
-        // 4) Middleware için cookie set et (7 gün)
-        document.cookie = `lexai_token=${data.access_token}; path=/; max-age=${7 * 24 * 3600}; SameSite=Lax`;
-        document.cookie = "lexai_guest=; path=/; max-age=0"; // Guest flag'i temizle
-        
+
+        // 2) /me endpoint'inden kullanıcı bilgilerini al (cookie otomatik gönderilir)
+        const meRes = await authApi.me();
+        const user = meRes.data;
+
+        // 3) Sadece user bilgisini store'a kaydet (token cookie'de saklı)
+        setUser(user);
+        setAuth(data.access_token, user); // Geriye dönük uyumluluk için
+
+        // 4) Guest flag'i temizle
+        document.cookie = "lexai_guest=; path=/; max-age=0";
+
       } else {
         // Register flow
         const { data } = await authApi.register({ name, email, password });
-        
-        const meRes = await fetch(
-          "/api/v1/auth/me",
-          { headers: { Authorization: `Bearer ${data.access_token}` } }
-        );
-        const user = await meRes.json();
-        
+
+        const meRes = await authApi.me();
+        const user = meRes.data;
+
+        setUser(user);
         setAuth(data.access_token, user);
-        document.cookie = `lexai_token=${data.access_token}; path=/; max-age=${7 * 24 * 3600}; SameSite=Lax`;
         document.cookie = "lexai_guest=; path=/; max-age=0";
       }
 
@@ -258,7 +252,7 @@ export default function LoginPage() {
                     </label>
                     {mode === "login" && (
                       <Link
-                        href="#"
+                        href="/forgot-password"
                         className="text-xs font-medium text-[#3B6FE8] hover:text-[#5B8FF8] transition-colors focus:outline-none focus:underline"
                         tabIndex={0}
                       >

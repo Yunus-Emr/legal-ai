@@ -1,5 +1,5 @@
 import uuid
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request, Cookie
 from fastapi.security import OAuth2PasswordBearer
 from pydantic import BaseModel
 from typing import Optional, List, Any
@@ -10,6 +10,7 @@ from app.db.models import User
 from app.core.security import get_current_user as get_current_user_required
 from app.services.rag_service import rag_service
 from app.core.logger import get_logger
+from app.core.rate_limit import limiter  # Circular import önlünce çözüm
 
 logger = get_logger(__name__)
 router = APIRouter()
@@ -18,20 +19,22 @@ router = APIRouter()
 oauth2_optional = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login", auto_error=False)
 
 async def get_optional_user(
-    token: Optional[str] = Depends(oauth2_optional),
+    request: Request,
+    bearer_token: Optional[str] = Depends(oauth2_optional),
+    cookie_token: Optional[str] = Cookie(alias="lexai_token", default=None),
     db: AsyncSession = Depends(get_db),
 ) -> Optional[User]:
-    """Returns User if authenticated, None if guest."""
+    """Cookie veya Bearer header'dan user döner, yoksa None (guest)."""
+    token = cookie_token or bearer_token
     if not token:
         return None
     try:
-        from app.core.security import get_current_user
-        from fastapi import Request
-        from fastapi.security import HTTPAuthorizationCredentials
         from jose import jwt, JWTError
         from app.services.auth_service import SECRET_KEY, ALGORITHM
         from app.db.repository import UserRepository
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        if payload.get("type") == "refresh":
+            return None
         user_id: str = payload.get("sub")
         if not user_id:
             return None
@@ -61,7 +64,9 @@ class ChatResponse(BaseModel):
     is_guest: bool = False
 
 @router.post("/chat", response_model=ChatResponse)
+@limiter.limit("30/minute")  # IP başına dakikada max 30 chat isteği
 async def chat(
+    request: Request,
     req: ChatRequest,
     current_user: Optional[User] = Depends(get_optional_user),
     db: AsyncSession = Depends(get_db),
@@ -115,7 +120,12 @@ async def chat(
             )
             q_log = QueryLog(
                 id=str(uuid.uuid4()), session_id=session_id,
-                query=req.query, answer=result["answer"], response_time_ms=duration_ms
+                query=req.query, answer=result["answer"],
+                response_time_ms=duration_ms,
+                sources=[
+                    {"document_name": s.get("document_name"), "chunk_id": s.get("chunk_id"), "score": s.get("score")}
+                    for s in result.get("sources", [])
+                ],
             )
             audit = AuditLog(
                 id=str(uuid.uuid4()), user_id=current_user.id,
@@ -172,30 +182,76 @@ async def chat_stream(
 
             import time
             start_time = time.time()
-            result = await rag_service.ask(query=req.query, session_id=session_id, history=history)
+
+            from app.services.llm_service import llm_service as _llm
+            from app.rag.pipeline import build_context
+            from app.rag.reranker import reranker
+            from app.services.embedding_service import embedding_service
+            from app.services.retrieval_service import retrieval_service
+            from app.rag.reranker import reranker as _reranker
+            from app.core.config import settings
+            import asyncio
+
+            # --- RAG adımları (retrieval + rerank + context) ---
+            query_vector = await embedding_service.embed_text(req.query)
+            hits = await retrieval_service.search_by_vector(vector=query_vector, top_k=8)
+            if hits:
+                hits = await asyncio.to_thread(reranker.rerank, req.query, hits)
+                k_limit = 3 if settings.LLM_PROVIDER == "huggingface" else 5
+                hits = hits[:k_limit]
+
+            context_limit = 1000 if settings.LLM_PROVIDER == "huggingface" else 2500
+            context = build_context(hits, max_tokens=context_limit) if hits else ""
+
+            from app.services.rag_service import LEGAL_COT_PROMPT, NO_DOCS_PROMPT, _format_history
+            history_text = _format_history(history or [])
+
+            if not hits:
+                prompt = NO_DOCS_PROMPT.format(question=req.query, history=history_text)
+            else:
+                prompt = LEGAL_COT_PROMPT.format(context=context, question=req.query, history=history_text)
+
+            full_answer = ""
+
+            # Gerçek streaming (OpenAI) veya simüle (HuggingFace/dummy)
+            if settings.LLM_PROVIDER == "openai" and _llm._get_openai_client():
+                async for token in _llm.stream_openai(prompt):
+                    full_answer += token
+                    yield f"data: {_json.dumps({'type': 'token', 'token': token})}\n\n"
+            else:
+                # HuggingFace / dummy — tam yanıt üret, kelime kelime gönder
+                result = await rag_service.ask(query=req.query, session_id=session_id, history=history)
+                full_answer = result["answer"]
+                words = full_answer.split(" ")
+                for i, word in enumerate(words):
+                    token = word + (" " if i < len(words) - 1 else "")
+                    yield f"data: {_json.dumps({'type': 'token', 'token': token})}\n\n"
+                    if i % 5 == 0:
+                        await asyncio.sleep(0.01)
+
             duration_ms = int((time.time() - start_time) * 1000)
 
-            # Simulate token streaming (split answer into words)
-            words = result["answer"].split(" ")
-            buffer = ""
-            for i, word in enumerate(words):
-                buffer += word + (" " if i < len(words) - 1 else "")
-                if i % 3 == 0 or i == len(words) - 1:
-                    yield f"data: {_json.dumps({'type': 'token', 'token': buffer})}\n\n"
-                    buffer = ""
-                    import asyncio
-                    await asyncio.sleep(0.02)
-
-            # Send sources
-            yield f"data: {_json.dumps({'type': 'sources', 'sources': result['sources']})}\n\n"
+            # Sources
+            sources = [
+                {"document_name": h.get("document_name", "Bilinmiyor"), "chunk_id": h.get("chunk_id"), "page": h.get("page"), "score": round(h.get("score", 0), 4)}
+                for h in hits
+            ]
+            yield f"data: {_json.dumps({'type': 'sources', 'sources': sources})}\n\n"
 
             # Persist if authenticated
             if not is_guest:
                 from app.db.models import QueryLog, AuditLog
                 db.add_all([
                     ChatHistory(id=str(uuid.uuid4()), session_id=session_id, role="user", content=req.query, user_id=current_user.id),
-                    ChatHistory(id=str(uuid.uuid4()), session_id=session_id, role="assistant", content=result["answer"], user_id=current_user.id),
-                    QueryLog(id=str(uuid.uuid4()), session_id=session_id, query=req.query, answer=result["answer"], response_time_ms=duration_ms),
+                    ChatHistory(id=str(uuid.uuid4()), session_id=session_id, role="assistant", content=full_answer, user_id=current_user.id),
+                    QueryLog(
+                        id=str(uuid.uuid4()),
+                        session_id=session_id,
+                        query=req.query,
+                        answer=full_answer,
+                        response_time_ms=duration_ms,
+                        sources=[{"document_name": s.get("document_name"), "chunk_id": s.get("chunk_id"), "score": s.get("score")} for s in sources],
+                    ),
                     AuditLog(id=str(uuid.uuid4()), user_id=current_user.id, action="query", details={"session_id": session_id}),
                 ])
                 await db.commit()

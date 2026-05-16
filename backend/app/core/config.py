@@ -59,6 +59,14 @@ class Settings(BaseSettings):
     RAG_CHUNK_SIZE: int = 512
     RAG_CHUNK_OVERLAP: int = 64
 
+    # SMTP (şifre sıfırlama emaili)
+    SMTP_HOST: str = ""
+    SMTP_PORT: int = 587
+    SMTP_USER: str = ""
+    SMTP_PASS: str = ""
+    SMTP_FROM: str = "noreply@legalai.com"
+    FRONTEND_URL: str = "http://localhost:3000"
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"

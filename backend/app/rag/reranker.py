@@ -17,10 +17,12 @@ class Reranker:
         if self._model is None:
             try:
                 from sentence_transformers import CrossEncoder
-                self._model = CrossEncoder("cross-encoder/ms-marco-MiniLM-L-6-v2")
-                logger.info("[Reranker] CrossEncoder yüklendi")
-            except Exception:
-                logger.warning("[Reranker] CrossEncoder yüklenemedi, keyword fallback")
+                # Çok dilli model — Türkçe hukuki metinler için ms-marco'nun İngilizce
+                # modeli yerine mMiniLM kullanıyoruz
+                self._model = CrossEncoder("cross-encoder/mmarco-mMiniLMv2-L12-H384-v1")
+                logger.info("[Reranker] Çok dilli CrossEncoder yüklendi (mmarco-mMiniLMv2)")
+            except Exception as e:
+                logger.warning(f"[Reranker] CrossEncoder yüklenemedi ({e}), keyword fallback")
         return self._model
 
     def rerank(

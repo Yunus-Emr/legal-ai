@@ -4,7 +4,7 @@ Repository — DB query abstraction layer
 from typing import List, Optional, Dict, Any
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete, func, update
-from app.db.models import Document, ChatHistory, QueryLog, User, Draft, AuditLog, Session, UserRole
+from app.db.models import Document, ChatHistory, QueryLog, User, Draft, AuditLog, UserRole
 import uuid
 from datetime import datetime
 
@@ -32,6 +32,11 @@ class DocumentRepository:
 
 
 class ChatRepository:
+    """
+    NOT: Bu repository şu an aktif kullanılmıyor.
+    chat.py rotaları doğrudan db.add_all() ile ChatHistory kayıt atıyor.
+    Gelecekteki refactoring'de bu sınıf kullanılacak.
+    """
     def __init__(self, db: AsyncSession):
         self.db = db
 

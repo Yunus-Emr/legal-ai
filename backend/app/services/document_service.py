@@ -4,10 +4,19 @@ Document Service — PDF yükleme, parse, chunk başlatma
 import io
 import os
 import uuid
+import aiofiles
+import pdfplumber
+from bs4 import BeautifulSoup
+try:
+    from docx import Document as DocxDocument
+except ImportError:
+    DocxDocument = None
+
 from typing import List, Dict, Any, Optional
 from datetime import datetime
+from fastapi import BackgroundTasks
 from app.core.logger import get_logger
-from app.rag.chunking import chunk_text
+from app.rag.chunking import chunk_by_paragraph
 from app.db.models import Document, AuditLog
 from app.db.repository import DocumentRepository
 from app.db.postgres import SessionLocal
@@ -34,6 +43,7 @@ class DocumentService:
 
     async def process_document(
         self,
+        background_tasks: BackgroundTasks,
         doc_id: str,
         filename: str,
         content: bytes,
@@ -63,16 +73,25 @@ class DocumentService:
             db.add(audit)
             await db.commit()
 
-        # Save to disk
         raw_dir = os.getenv("DATA_DIR", "/app/data/raw_pdfs")
         os.makedirs(raw_dir, exist_ok=True)
         filepath = os.path.join(raw_dir, f"{doc_id}.pdf")
-        with open(filepath, "wb") as f:
-            f.write(content)
+        async with aiofiles.open(filepath, "wb") as f:
+            await f.write(content)
 
+        # Arka plan görevini (BackgroundTasks) kuyruğa ekle
+        background_tasks.add_task(
+            self._process_document_task,
+            doc_id, filename, content, content_type
+        )
+
+        return {**doc_data, "status": "processing"}
+
+    async def _process_document_task(self, doc_id: str, filename: str, content: bytes, content_type: str):
         try:
             text = self._parse(content, content_type)
-            chunks = chunk_text(text, doc_id=doc_id, filename=filename)
+            # Paragraf bazlı chunking — hukuki madde/fıkra sınırlarını korur
+            chunks = chunk_by_paragraph(text, doc_id=doc_id, filename=filename)
 
             from app.services.retrieval_service import retrieval_service
             indexed = await retrieval_service.index_chunks(chunks)
@@ -95,9 +114,6 @@ class DocumentService:
                 )
                 await db.commit()
             logger.error(f"[DocService] {filename} işleme hatası: {e}")
-            raise
-
-        return {**doc_data, "chunk_count": indexed if 'indexed' in locals() else 0, "status": "indexed"}
 
     def _parse(self, content: bytes, content_type: str) -> str:
         # Plain text
@@ -106,28 +122,21 @@ class DocumentService:
 
         # HTML
         if content_type == "text/html":
-            try:
-                from bs4 import BeautifulSoup
-                soup = BeautifulSoup(content, "html.parser")
-                return soup.get_text(separator="\n", strip=True)
-            except ImportError:
-                return content.decode("utf-8", errors="replace")
+            soup = BeautifulSoup(content, "html.parser")
+            return soup.get_text(separator="\n", strip=True)
 
         # DOCX
         if "wordprocessingml" in (content_type or "") or content_type == "application/octet-stream":
-            try:
-                import io
-                from docx import Document as DocxDocument
+            if DocxDocument is not None:
                 doc = DocxDocument(io.BytesIO(content))
                 paragraphs = [p.text for p in doc.paragraphs if p.text.strip()]
                 return "\n\n".join(paragraphs)
-            except ImportError:
+            else:
                 logger.warning("[DocService] python-docx yüklü değil, metin çıkarılamadı")
                 return ""
 
         # PDF (default)
         try:
-            import pdfplumber
             with pdfplumber.open(io.BytesIO(content)) as pdf:
                 pages = []
                 for page in pdf.pages:
@@ -135,14 +144,9 @@ class DocumentService:
                     if text:
                         pages.append(text)
                 return "\n\n".join(pages)
-        except Exception:
-            try:
-                import PyPDF2
-                reader = PyPDF2.PdfReader(io.BytesIO(content))
-                pages = [p.extract_text() or "" for p in reader.pages]
-                return "\n\n".join(pages)
-            except Exception:
-                return content.decode("utf-8", errors="replace")
+        except Exception as e:
+            logger.warning(f"[DocService] pdfplumber hatası: {e}, raw decode deneniyor")
+            return content.decode("utf-8", errors="replace")
 
     async def delete_document(self, doc_id: str) -> None:
         async with SessionLocal() as db:

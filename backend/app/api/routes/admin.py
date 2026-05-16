@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from typing import Any, Dict, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, delete
 from app.db.postgres import get_db
 from app.core.security import get_current_user
 from app.db.models import User, UserRole
@@ -29,20 +29,33 @@ async def get_users(
     admin: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    result = await db.execute(select(User))
+    """N+1 sorunu düzeltildi — tek JOIN sorgusuyla kullanıcı+rol çekiliyor."""
+    result = await db.execute(
+        select(User, UserRole.role)
+        .outerjoin(UserRole, User.id == UserRole.user_id)
+        .order_by(User.created_at.desc())
+    )
+    # Bir kullanıcının birden fazla rolü olabilir — dict ile deduplicate et
+    users_map: Dict[str, Dict] = {}
+    for user, role in result.all():
+        if user.id not in users_map:
+            users_map[user.id] = {
+                "id": user.id,
+                "name": user.name,
+                "email": user.email,
+                "roles": [],
+                "isActive": user.is_active,
+                "created_at": user.created_at.isoformat(),
+            }
+        if role:
+            users_map[user.id]["roles"].append(role)
+
+    # Role'ü tek string'e indir (admin varsa admin, yoksa user)
     users = []
-    for u in result.scalars().all():
-        # Get role
-        role_result = await db.execute(select(UserRole.role).where(UserRole.user_id == u.id))
-        roles = [r for (r,) in role_result.all()]
-        users.append({
-            "id": u.id,
-            "name": u.name,
-            "email": u.email,
-            "role": "admin" if "admin" in roles else "user",
-            "isActive": u.is_active,
-            "created_at": u.created_at.isoformat(),
-        })
+    for u in users_map.values():
+        u["role"] = "admin" if "admin" in u["roles"] else "user"
+        del u["roles"]
+        users.append(u)
     return users
 
 
@@ -67,10 +80,8 @@ async def update_user(
         user.is_active = update.is_active
 
     if update.role is not None:
-        # Remove existing roles and re-assign
-        await db.execute(
-            __import__("sqlalchemy", fromlist=["delete"]).delete(UserRole).where(UserRole.user_id == user_id)
-        )
+        # Mevcut rolleri temizle ve yenisini ata — düzgün import ile
+        await db.execute(delete(UserRole).where(UserRole.user_id == user_id))
         db.add(UserRole(user_id=user_id, role=update.role))
 
     await db.commit()
@@ -94,11 +105,11 @@ async def get_config(admin: User = Depends(require_admin), db: AsyncSession = De
     from app.db.models import SystemConfig
     result = await db.execute(select(SystemConfig))
     configs = result.scalars().all()
-    
+
     config_dict = DEFAULT_CONFIG.copy()
     for c in configs:
         config_dict[c.key] = c.value
-        
+
     return config_dict
 
 class ConfigUpdate(BaseModel):
@@ -108,7 +119,7 @@ class ConfigUpdate(BaseModel):
 async def update_config(body: ConfigUpdate, admin: User = Depends(require_admin), db: AsyncSession = Depends(get_db)):
     from app.db.models import SystemConfig
     from sqlalchemy.dialects.postgresql import insert
-    
+
     for key, value in body.values.items():
         stmt = insert(SystemConfig).values(key=key, value=value)
         stmt = stmt.on_conflict_do_update(
@@ -116,6 +127,6 @@ async def update_config(body: ConfigUpdate, admin: User = Depends(require_admin)
             set_=dict(value=stmt.excluded.value)
         )
         await db.execute(stmt)
-        
+
     await db.commit()
     return {"updated": list(body.values.keys())}

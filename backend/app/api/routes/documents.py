@@ -1,6 +1,6 @@
 import os
 import uuid
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, BackgroundTasks
 from fastapi.responses import JSONResponse, FileResponse
 from typing import List
 from app.core.security import get_current_user
@@ -29,12 +29,13 @@ async def list_documents(current_user: User = Depends(get_current_user)):
     return {"documents": docs}
 
 
-@router.post("/documents/upload")
+@router.post("/documents/upload", status_code=202)
 async def upload_documents(
+    background_tasks: BackgroundTasks,
     files: List[UploadFile] = File(...),
     current_user: User = Depends(get_current_user),
 ):
-    """PDF dosyası yükler, parse eder ve indeksler."""
+    """PDF dosyası yükler ve arka planda işlenmesi için kuyruğa alır."""
     results = []
     for f in files:
         if f.content_type not in ALLOWED_TYPES:
@@ -56,10 +57,12 @@ async def upload_documents(
 
         try:
             result = await document_service.process_document(
+                background_tasks=background_tasks,
                 doc_id=doc_id,
                 filename=f.filename or "upload.pdf",
                 content=content,
                 content_type=f.content_type or "application/pdf",
+                user_id=current_user.id,
             )
             results.append(result)
         except Exception as e:

@@ -67,10 +67,18 @@ class RetrievalService:
         try:
             from app.vectorstore.opensearch_client import opensearch_client
             await opensearch_client.bulk_index(docs)
+            logger.info(f"[Retrieval] {len(docs)} chunk OpenSearch'e yazıldı")
         except Exception as e:
-            logger.warning(f"[Retrieval] OpenSearch index hatası: {e}")
+            logger.warning(f"[Retrieval] OpenSearch index hatası: {e} — FAISS fallback'e yazılıyor")
+            try:
+                from app.vectorstore.faiss_index import faiss_index
+                faiss_index.add(docs)
+                logger.info(f"[Retrieval] {len(docs)} chunk FAISS'e yazıldı (fallback)")
+            except Exception as e2:
+                logger.error(f"[Retrieval] FAISS de yazılamadı: {e2}")
 
         return len(docs)
+
 
     async def _enrich_hits_with_metadata(self, hits: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         chunk_ids = [h.get("chunk_id") for h in hits if h.get("chunk_id")]

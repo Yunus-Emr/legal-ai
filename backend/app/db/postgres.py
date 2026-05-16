@@ -11,8 +11,10 @@ logger = get_logger(__name__)
 engine = create_async_engine(
     settings.POSTGRES_URL,
     echo=settings.DEBUG,
-    pool_size=5,
-    max_overflow=10,
+    pool_size=10,           # Paralel istek kapasitesi artırıldı
+    max_overflow=20,        # Ani yük spike'ları için ek bağlantı
+    pool_pre_ping=True,     # Her kullanımda bağlantı canlılığını kontrol et
+    pool_recycle=3600,      # 1 saatte bağlantıları yenile (firewall drop önler)
 )
 
 SessionLocal = sessionmaker(

@@ -24,7 +24,8 @@ LEGAL_INDEX_MAPPING = {
                 "method": {
                     "name":       "hnsw",
                     "space_type": "innerproduct",
-                    "engine":     "nmslib",
+                    # nmslib OpenSearch 2.x'te kaldırıldı — lucene kullanıyoruz
+                    "engine":     "lucene",
                     "parameters": {"ef_construction": 128, "m": 16},
                 },
             },

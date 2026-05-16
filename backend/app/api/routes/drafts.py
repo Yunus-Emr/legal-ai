@@ -1,6 +1,6 @@
 import uuid
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional
 
@@ -12,11 +12,11 @@ from app.db.models import User
 router = APIRouter()
 
 class DraftCreate(BaseModel):
-    title: str
+    title: str = Field(..., min_length=1, max_length=255)
     content: Optional[str] = None
 
 class DraftUpdate(BaseModel):
-    title: Optional[str] = None
+    title: Optional[str] = Field(None, min_length=1, max_length=255)
     content: Optional[str] = None
 
 class DraftResponse(BaseModel):
@@ -24,7 +24,7 @@ class DraftResponse(BaseModel):
     user_id: str
     title: str
     content: Optional[str]
-    
+
     class Config:
         from_attributes = True
 
@@ -49,13 +49,25 @@ async def create_draft(draft_in: DraftCreate, db: AsyncSession = Depends(get_db)
 @router.put("/{draft_id}", response_model=DraftResponse)
 async def update_draft(draft_id: str, draft_in: DraftUpdate, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
     repo = DraftRepository(db)
-    updates = {k: v for k, v in draft_in.dict().items() if v is not None}
-    draft = await repo.update(draft_id, updates)
+    # ── Sahiplik kontrolü ────────────────────────────────────
+    draft = await repo.get(draft_id)
     if not draft:
         raise HTTPException(status_code=404, detail="Draft not found")
-    return draft
+    if draft.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Bu taslağa erişim yetkiniz yok")
+    # ─────────────────────────────────────────────────────────
+    updates = {k: v for k, v in draft_in.dict().items() if v is not None}
+    updated = await repo.update(draft_id, updates)
+    return updated
 
 @router.delete("/{draft_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_draft(draft_id: str, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
     repo = DraftRepository(db)
+    # ── Sahiplik kontrolü ────────────────────────────────────
+    draft = await repo.get(draft_id)
+    if not draft:
+        raise HTTPException(status_code=404, detail="Draft not found")
+    if draft.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Bu taslağa erişim yetkiniz yok")
+    # ─────────────────────────────────────────────────────────
     await repo.delete(draft_id)

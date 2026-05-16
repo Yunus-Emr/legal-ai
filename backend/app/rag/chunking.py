@@ -54,13 +54,19 @@ def chunk_by_paragraph(
     Paragraf bazlı chunking — madde/paragraf sınırlarını korur.
     Hukuki metinler için daha iyi sonuç verebilir.
     """
+    if not text or not text.strip():
+        return []
+
     paragraphs = re.split(r"\n{2,}", text.strip())
     chunks = []
     buffer: List[str] = []
     buf_words = 0
+    current_start_word = 0  # Belgede kaçıncı kelimeden başlıyor
 
     for para in paragraphs:
         words = para.split()
+        if not words:
+            continue
         if buf_words + len(words) > max_words and buffer:
             chunks.append(
                 {
@@ -69,9 +75,10 @@ def chunk_by_paragraph(
                     "document_name": filename,
                     "text": "\n\n".join(buffer),
                     "word_count": buf_words,
-                    "start_word": 0,
+                    "start_word": current_start_word,  # Gerçek konum
                 }
             )
+            current_start_word += buf_words
             buffer = []
             buf_words = 0
         buffer.append(para)
@@ -85,8 +92,9 @@ def chunk_by_paragraph(
                 "document_name": filename,
                 "text": "\n\n".join(buffer),
                 "word_count": buf_words,
-                "start_word": 0,
+                "start_word": current_start_word,
             }
         )
 
     return chunks
+
