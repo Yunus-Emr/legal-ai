@@ -36,8 +36,8 @@ export default function DocumentsPage() {
 
   useEffect(() => {
     fetchDocuments();
-    // Auto refresh every 10 seconds to catch indexing updates
-    const interval = setInterval(() => fetchDocuments(), 10000);
+    // Auto refresh every 30 seconds to catch indexing updates (Reduced from 10s to lower load)
+    const interval = setInterval(() => fetchDocuments(), 30000);
     return () => clearInterval(interval);
   }, []);
 
@@ -134,20 +134,9 @@ export default function DocumentsPage() {
         </Button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 flex-1 overflow-hidden">
-        {/* Sidebar Folders */}
-        <div className="col-span-1 bg-surface border border-border rounded-xl p-4 flex flex-col gap-2 overflow-y-auto shadow-sm">
-          <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 px-2">Folders</h3>
-          {["All Documents", "M&A Deals", "Employment Contracts", "Litigation Evidence", "Firm Templates", "Archived"].map((folder, i) => (
-            <button key={i} className={`flex items-center justify-between p-2 rounded-lg text-sm transition-colors ${i === 0 ? 'bg-primary/10 text-primary font-medium' : 'text-muted-foreground hover:bg-elevated hover:text-foreground'}`}>
-              <span className="flex items-center gap-2"><Folder className="w-4 h-4" /> {folder}</span>
-              {i === 0 && <span className="text-xs opacity-50 font-mono">{documents.length}</span>}
-            </button>
-          ))}
-        </div>
-
+      <div className="grid grid-cols-1 gap-6 flex-1 overflow-hidden">
         {/* Document Grid */}
-        <div className="col-span-3 bg-surface border border-border rounded-xl overflow-hidden shadow-sm flex flex-col">
+        <div className="bg-surface border border-border rounded-xl overflow-hidden shadow-sm flex flex-col">
           <div className="overflow-x-auto flex-1">
             <table className="w-full text-sm text-left">
               <thead className="text-muted-foreground text-xs uppercase tracking-wider border-b border-border bg-elevated/50 sticky top-0 z-10">

@@ -1,13 +1,53 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Users, Settings, Shield, CreditCard, Plug, Search, Plus } from "lucide-react";
 import { motion } from "framer-motion";
+import { adminApi, AdminUser } from "@/lib/api";
 
 export default function AdminPage() {
+  const [users, setUsers] = useState<AdminUser[]>([]);
+  const [config, setConfig] = useState<any>({});
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        setLoading(true);
+        const [usersRes, configRes] = await Promise.all([
+          adminApi.users(),
+          adminApi.config()
+        ]);
+        setUsers(usersRes.data);
+        setConfig(configRes.data);
+      } catch (err: any) {
+        setError(err.response?.data?.detail || "Admin verileri alınamadı. Yetkiniz olmayabilir.");
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchData();
+  }, []);
+
+  const formatDate = (dateStr: string) => {
+    return new Date(dateStr).toLocaleDateString("tr-TR", {
+      year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit"
+    });
+  };
+
+  if (loading) {
+    return <div className="p-8 h-full flex items-center justify-center text-muted-foreground">Admin verileri yükleniyor...</div>;
+  }
+
+  if (error) {
+    return <div className="p-8 h-full flex items-center justify-center text-red-400">{error}</div>;
+  }
+
   return (
     <div className="p-8 h-full flex flex-col font-sans">
       <div className="mb-8">
@@ -43,36 +83,39 @@ export default function AdminPage() {
                       <th className="px-6 py-4 font-medium">User</th>
                       <th className="px-6 py-4 font-medium">Role (RBAC)</th>
                       <th className="px-6 py-4 font-medium">Status</th>
-                      <th className="px-6 py-4 font-medium">Last Login</th>
+                      <th className="px-6 py-4 font-medium">Registered</th>
                       <th className="px-6 py-4"></th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">
-                    {[
-                      { name: "Atty. Yilmaz", email: "yilmaz@firm.com", role: "Super Admin", status: "Active", login: "2 mins ago" },
-                      { name: "Sarah Connor", email: "s.connor@firm.com", role: "Partner", status: "Active", login: "1 hour ago" },
-                      { name: "John Doe", email: "j.doe@firm.com", role: "Associate", status: "Inactive", login: "3 days ago" }
-                    ].map((u, i) => (
-                      <tr key={i} className="hover:bg-elevated/50 transition-colors">
+                    {users.map((u) => (
+                      <tr key={u.id} className="hover:bg-elevated/50 transition-colors">
                         <td className="px-6 py-4">
                           <p className="font-medium text-foreground">{u.name}</p>
                           <p className="text-xs text-muted-foreground">{u.email}</p>
                         </td>
                         <td className="px-6 py-4">
-                          <span className="px-2 py-1 bg-primary/10 text-primary border border-primary/20 rounded-md text-xs font-semibold">{u.role}</span>
+                          <span className={`px-2 py-1 ${u.role === 'admin' ? 'bg-purple-500/10 text-purple-400 border-purple-500/20' : 'bg-primary/10 text-primary border-primary/20'} border rounded-md text-xs font-semibold uppercase`}>
+                            {u.role}
+                          </span>
                         </td>
                         <td className="px-6 py-4">
                           <div className="flex items-center gap-2">
-                            <div className={`w-2 h-2 rounded-full ${u.status === 'Active' ? 'bg-success shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-muted-foreground'}`}></div>
-                            <span className="text-muted-foreground">{u.status}</span>
+                            <div className={`w-2 h-2 rounded-full ${u.isActive ? 'bg-success shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-red-500'}`}></div>
+                            <span className="text-muted-foreground">{u.isActive ? "Active" : "Disabled"}</span>
                           </div>
                         </td>
-                        <td className="px-6 py-4 text-muted-foreground font-mono text-xs">{u.login}</td>
+                        <td className="px-6 py-4 text-muted-foreground font-mono text-xs">{formatDate(u.created_at)}</td>
                         <td className="px-6 py-4 text-right">
                           <Button variant="ghost" size="sm" className="text-primary hover:text-primary">Edit</Button>
                         </td>
                       </tr>
                     ))}
+                    {users.length === 0 && (
+                      <tr>
+                        <td colSpan={5} className="px-6 py-8 text-center text-muted-foreground">Kullanıcı bulunamadı.</td>
+                      </tr>
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -89,15 +132,15 @@ export default function AdminPage() {
                 <CardContent className="p-6 space-y-4">
                   <div>
                     <label className="text-sm font-medium text-foreground block mb-2">Primary Legal Model</label>
-                    <select className="w-full bg-elevated border border-border rounded-lg p-2.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary">
-                      <option>GPT-4 Legal Fine-tuned</option>
-                      <option>Claude 3.5 Sonnet (Legal Context)</option>
-                      <option>LexAI Custom LLM (Self-hosted)</option>
+                    <select value={config.llm_model} className="w-full bg-elevated border border-border rounded-lg p-2.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary" onChange={() => {}}>
+                      <option value="TinyLlama/TinyLlama-1.1B-Chat-v1.0">TinyLlama-1.1B-Chat</option>
+                      <option value="gpt-4">GPT-4 Legal Fine-tuned</option>
+                      <option value="claude-3">Claude 3.5 Sonnet</option>
                     </select>
                   </div>
                   <div>
-                    <label className="text-sm font-medium text-foreground block mb-2">Knowledge Base Injection Limit</label>
-                    <Input type="number" defaultValue="250000" className="bg-elevated border-border" />
+                    <label className="text-sm font-medium text-foreground block mb-2">Max Tokens</label>
+                    <Input type="number" defaultValue={config.max_tokens} className="bg-elevated border-border" />
                     <p className="text-xs text-muted-foreground mt-1">Tokens per request context window.</p>
                   </div>
                 </CardContent>

@@ -7,6 +7,11 @@ Tarih: 2026-05-16
 from alembic import op
 import sqlalchemy as sa
 
+# revision identifiers, used by Alembic.
+revision = '20260516_add_sources'
+down_revision = '3e2a4ae7a01e'
+branch_labels = None
+depends_on = None
 
 def upgrade():
     # query_logs.sources kolonu

@@ -14,6 +14,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useChat } from "@/hooks/useChat";
 import { useAuthStore } from "@/store/authStore";
+import { documentsApi, Document } from "@/lib/api";
 
 function CircularGauge({ score, size = 64, strokeWidth = 6 }: { score: number, size?: number, strokeWidth?: number }) {
   const radius = (size - strokeWidth) / 2;
@@ -54,8 +55,22 @@ export default function AICanvasPage() {
   const [mode, setMode] = useState("Contract Review");
   const [jurisdiction, setJurisdiction] = useState("New York, USA");
   
+  const [documents, setDocuments] = useState<Document[]>([]);
+  const [selectedDoc, setSelectedDoc] = useState<Document | null>(null);
+  const [isLoadingDocs, setIsLoadingDocs] = useState(true);
+
   const { messages, isStreaming, sources, error, sendMessage } = useChat();
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    documentsApi.list().then(res => {
+      setDocuments(res.data.documents);
+      setIsLoadingDocs(false);
+    }).catch(err => {
+      console.error(err);
+      setIsLoadingDocs(false);
+    });
+  }, []);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -65,7 +80,14 @@ export default function AICanvasPage() {
 
   const handleSend = () => {
     if (input.trim() && !isStreaming) {
-      sendMessage(input.trim());
+      // Append mode and selected document to the prompt so the backend knows
+      let enrichedPrompt = `[Role: ${mode}, Jurisdiction: ${jurisdiction}]\n`;
+      if (selectedDoc) {
+        enrichedPrompt += `[Primary Context Document: ${selectedDoc.filename}]\n`;
+      }
+      enrichedPrompt += input.trim();
+      
+      sendMessage(enrichedPrompt);
       setInput("");
     }
   };
@@ -87,41 +109,72 @@ export default function AICanvasPage() {
           <div className="h-12 border-b border-border flex items-center justify-between px-4 bg-surface shrink-0 z-10">
             <div className="flex items-center gap-3">
               <FileText className="w-4 h-4 text-primary" />
-              <span className="text-sm font-medium font-mono">Master_Service_Agreement_v4.pdf</span>
-              <span className="px-2 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider bg-elevated text-muted-foreground border border-border">
-                Read Only
+              <span className="text-sm font-medium font-mono">
+                {selectedDoc ? selectedDoc.filename : "Select a Document from Corpus"}
               </span>
+              {selectedDoc && (
+                <span className="px-2 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider bg-success/10 text-success border border-success/20">
+                  {selectedDoc.status === 'indexed' ? 'Ready' : 'Processing'}
+                </span>
+              )}
             </div>
-            <div className="flex items-center gap-2">
-              <Button variant="ghost" size="sm" className="h-8 text-xs text-muted-foreground hover:text-foreground">
-                <Download className="w-3.5 h-3.5 mr-2" />
-                Export
-              </Button>
-            </div>
+            {selectedDoc && (
+              <div className="flex items-center gap-2">
+                <Button variant="ghost" size="sm" className="h-8 text-xs text-muted-foreground hover:text-foreground" onClick={() => window.open(`/api/v1/documents/${selectedDoc.id}/download`, '_blank')}>
+                  <Download className="w-3.5 h-3.5 mr-2" />
+                  Download Original
+                </Button>
+                <Button variant="ghost" size="sm" className="h-8 text-xs text-muted-foreground hover:text-foreground" onClick={() => setSelectedDoc(null)}>
+                  Close
+                </Button>
+              </div>
+            )}
           </div>
           
           <ScrollArea className="flex-1 p-8 bg-[#0A0E1A]">
-            <div className="max-w-3xl mx-auto bg-white/5 shadow-sm border border-border rounded-xl p-10 min-h-[800px] text-foreground font-serif">
-              <h1 className="text-2xl mb-6 font-semibold">MASTER SERVICE AGREEMENT</h1>
-              <p className="text-sm leading-loose text-muted-foreground mb-4">
-                This Master Service Agreement (the "Agreement") is entered into as of October 1, 2024 (the "Effective Date"), by and between TechCorp Inc., a Delaware corporation ("Provider"), and Global Logistics LLC, a New York limited liability company ("Client").
-              </p>
-              
-              <h2 className="text-lg mt-8 mb-4 text-[#7C3AED] font-semibold flex items-center gap-2">
-                <Sparkles className="w-4 h-4" /> 4. LIMITATION OF LIABILITY
-              </h2>
-              <div className="relative group">
-                <div className="absolute -inset-2 bg-[#7C3AED]/5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                <p className="text-sm leading-loose relative z-10 p-3 border-l-2 border-[#7C3AED] bg-[#7C3AED]/10 rounded-r-lg">
-                  4.2. IN NO EVENT SHALL EITHER PARTY BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, OR CONSEQUENTIAL DAMAGES ARISING OUT OF OR IN CONNECTION WITH THIS AGREEMENT. THE TOTAL LIABILITY OF THE PROVIDER UNDER THIS AGREEMENT SHALL NOT EXCEED THE TOTAL FEES PAID BY THE CLIENT IN THE SIX (6) MONTHS PRECEDING THE CLAIM.
-                </p>
+            {!selectedDoc ? (
+              <div className="max-w-3xl mx-auto space-y-4">
+                <h2 className="text-xl font-semibold mb-6">Your Corpus</h2>
+                {isLoadingDocs ? (
+                  <p className="text-muted-foreground animate-pulse">Loading documents...</p>
+                ) : documents.length === 0 ? (
+                  <div className="p-8 border border-dashed border-border rounded-xl text-center text-muted-foreground">
+                    No documents found. Go to the Documents tab to upload some.
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {documents.map(doc => (
+                      <div 
+                        key={doc.id} 
+                        onClick={() => setSelectedDoc(doc)}
+                        className="p-4 bg-surface border border-border rounded-xl hover:border-primary/50 cursor-pointer transition-all hover:shadow-[0_0_15px_rgba(59,111,232,0.1)] group"
+                      >
+                        <div className="flex items-center gap-3 mb-2">
+                          <div className="p-2 bg-primary/10 rounded-lg text-primary group-hover:bg-primary group-hover:text-white transition-colors">
+                            <FileText className="w-5 h-5" />
+                          </div>
+                          <p className="font-medium truncate flex-1">{doc.filename}</p>
+                        </div>
+                        <div className="flex items-center justify-between mt-4">
+                          <span className="text-xs text-muted-foreground">{(doc.size_bytes / 1024 / 1024).toFixed(2)} MB</span>
+                          <span className="text-xs px-2 py-1 bg-elevated rounded font-mono">{doc.chunk_count} chunks</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
-              
-              <h2 className="text-lg mt-8 mb-4 font-semibold">5. INDEMNIFICATION</h2>
-              <p className="text-sm leading-loose text-muted-foreground mb-4">
-                Client agrees to indemnify and hold harmless Provider from and against any claims, damages, liabilities, costs, and expenses arising out of Client's use of the Services in violation of this Agreement.
-              </p>
-            </div>
+            ) : (
+              <div className="max-w-3xl mx-auto bg-white/5 shadow-sm border border-border rounded-xl p-10 min-h-[800px] text-foreground font-serif">
+                <div className="flex items-center justify-center h-full min-h-[400px] flex-col opacity-50">
+                  <FileText className="w-16 h-16 mb-4 text-muted-foreground" />
+                  <p className="text-center font-sans">
+                    {selectedDoc.filename} is loaded in the AI context.<br/>
+                    <span className="text-sm mt-2 block">You can now query specific provisions on the right panel.</span>
+                  </p>
+                </div>
+              </div>
+            )}
           </ScrollArea>
         </ResizablePanel>
 
