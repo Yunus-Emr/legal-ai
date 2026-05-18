@@ -33,10 +33,10 @@ class Settings(BaseSettings):
 
     # OpenAI / LLM
     OPENAI_API_KEY: str = ""
-    LLM_PROVIDER: str = "openai" # huggingface | openai
+    LLM_PROVIDER: str = "openai"  # huggingface | openai
     LLM_MODEL: str = "gpt-3.5-turbo"
     LLM_LOCAL_MODEL_PATH: str = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
-    LLM_DEVICE: str = "cpu" # cuda | cpu | mps
+    LLM_DEVICE: str = "cpu"  # cuda | cpu | mps
     LLM_TEMPERATURE: float = 0.1
     LLM_MAX_TOKENS: int = 1024
 

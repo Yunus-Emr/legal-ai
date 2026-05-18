@@ -57,11 +57,8 @@ class RAGService:
         session_id: str,
         history: Optional[List[Dict[str, str]]] = None,
     ) -> Dict[str, Any]:
-        # 1. Embed the query
-        query_vector = await embedding_service.embed_text(query)
-
-        # 2. Retrieve top-k chunks
-        hits = await retrieval_service.search_by_vector(vector=query_vector, top_k=8)
+        # 1-2. Hybrid Search (Embeddings + BM25)
+        hits = await retrieval_service.search(query=query, top_k=8)
         logger.info(f"[RAG] {len(hits)} chunk bulundu, re-ranking...")
 
         # 3. Re-rank (CrossEncoder if available, keyword fallback otherwise)

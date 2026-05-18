@@ -5,12 +5,12 @@ from pydantic import BaseModel
 from typing import Optional, List, Any
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.postgres import get_db
-from app.db.models import ChatHistory
 from app.db.models import User
+from app.db.repository import ChatRepository, QueryLogRepository, AuditLogRepository
 from app.core.security import get_current_user as get_current_user_required
 from app.services.rag_service import rag_service
 from app.core.logger import get_logger
-from app.core.rate_limit import limiter  # Circular import önlünce çözüm
+from app.core.rate_limit import limiter
 
 logger = get_logger(__name__)
 router = APIRouter()
@@ -64,7 +64,7 @@ class ChatResponse(BaseModel):
     is_guest: bool = False
 
 @router.post("/chat", response_model=ChatResponse)
-@limiter.limit("30/minute")  # IP başına dakikada max 30 chat isteği
+@limiter.limit("30/minute")
 async def chat(
     request: Request,
     req: ChatRequest,
@@ -84,23 +84,16 @@ async def chat(
 
     try:
         import time
-        from sqlalchemy import select as sa_select
-
         start_time = time.time()
+
+        chat_repo = ChatRepository(db)
+        qlog_repo = QueryLogRepository(db)
+        audit_repo = AuditLogRepository(db)
 
         # Fetch conversation history for memory (authenticated only)
         history: list = []
         if not is_guest and session_id:
-            hist_result = await db.execute(
-                sa_select(ChatHistory.role, ChatHistory.content)
-                .where(ChatHistory.session_id == session_id)
-                .order_by(ChatHistory.created_at.desc())
-                .limit(8)
-            )
-            history = [
-                {"role": r, "content": c}
-                for r, c in reversed(hist_result.all())
-            ]
+            history = await chat_repo.get_recent_history(session_id)
 
         result = await rag_service.ask(
             query=req.query, session_id=session_id, history=history
@@ -109,29 +102,28 @@ async def chat(
 
         # Only persist to DB for authenticated users
         if not is_guest:
-            from app.db.models import QueryLog, AuditLog
-            chat_q = ChatHistory(
-                id=str(uuid.uuid4()), session_id=session_id,
-                role="user", content=req.query, user_id=current_user.id
+            sources_list = [
+                {"document_name": s.get("document_name"), "chunk_id": s.get("chunk_id"), "score": s.get("score")}
+                for s in result.get("sources", [])
+            ]
+            await chat_repo.add_turn(
+                session_id=session_id,
+                query=req.query,
+                answer=result["answer"],
+                user_id=current_user.id,
             )
-            chat_a = ChatHistory(
-                id=str(uuid.uuid4()), session_id=session_id,
-                role="assistant", content=result["answer"], user_id=current_user.id
-            )
-            q_log = QueryLog(
-                id=str(uuid.uuid4()), session_id=session_id,
-                query=req.query, answer=result["answer"],
+            await qlog_repo.log(
+                session_id=session_id,
+                query=req.query,
+                answer=result["answer"],
                 response_time_ms=duration_ms,
-                sources=[
-                    {"document_name": s.get("document_name"), "chunk_id": s.get("chunk_id"), "score": s.get("score")}
-                    for s in result.get("sources", [])
-                ],
+                sources=sources_list,
             )
-            audit = AuditLog(
-                id=str(uuid.uuid4()), user_id=current_user.id,
-                action="query", details={"session_id": session_id, "query": req.query[:100]}
+            await audit_repo.log(
+                action="query",
+                user_id=current_user.id,
+                details={"session_id": session_id, "query": req.query[:100]},
             )
-            db.add_all([chat_q, chat_a, q_log, audit])
             await db.commit()
 
         return ChatResponse(
@@ -168,19 +160,8 @@ async def chat_stream(
             # Send session_id first
             yield f"data: {_json.dumps({'type': 'session', 'session_id': session_id})}\n\n"
 
-            # Fetch history
-            history: list = []
-            if not is_guest and session_id:
-                from sqlalchemy import select as sa_select2
-                hist_result = await db.execute(
-                    sa_select2(ChatHistory.role, ChatHistory.content)
-                    .where(ChatHistory.session_id == session_id)
-                    .order_by(ChatHistory.created_at.desc())
-                    .limit(8)
-                )
-                history = [{"role": r, "content": c} for r, c in reversed(hist_result.all())]
-
             import time
+            import asyncio
             start_time = time.time()
 
             from app.services.llm_service import llm_service as _llm
@@ -188,13 +169,16 @@ async def chat_stream(
             from app.rag.reranker import reranker
             from app.services.embedding_service import embedding_service
             from app.services.retrieval_service import retrieval_service
-            from app.rag.reranker import reranker as _reranker
             from app.core.config import settings
-            import asyncio
+
+            # Fetch history via repository
+            history: list = []
+            if not is_guest and session_id:
+                _chat_repo = ChatRepository(db)
+                history = await _chat_repo.get_recent_history(session_id)
 
             # --- RAG adımları (retrieval + rerank + context) ---
-            query_vector = await embedding_service.embed_text(req.query)
-            hits = await retrieval_service.search_by_vector(vector=query_vector, top_k=8)
+            hits = await retrieval_service.search(query=req.query, top_k=8)
             if hits:
                 hits = await asyncio.to_thread(reranker.rerank, req.query, hits)
                 k_limit = 3 if settings.LLM_PROVIDER == "huggingface" else 5
@@ -213,15 +197,15 @@ async def chat_stream(
 
             full_answer = ""
 
-            # Gerçek streaming (OpenAI) veya simüle (HuggingFace/dummy)
+            # Provider'a göre streaming seç
             if settings.LLM_PROVIDER == "openai" and _llm._get_openai_client():
                 async for token in _llm.stream_openai(prompt):
                     full_answer += token
                     yield f"data: {_json.dumps({'type': 'token', 'token': token})}\n\n"
             else:
-                # HuggingFace / dummy — tam yanıt üret, kelime kelime gönder
-                result = await rag_service.ask(query=req.query, session_id=session_id, history=history)
-                full_answer = result["answer"]
+                # HuggingFace / dummy — tam yanıt üret, kelime kelime simüle et
+                _result = await rag_service.ask(query=req.query, session_id=session_id, history=history)
+                full_answer = _result["answer"]
                 words = full_answer.split(" ")
                 for i, word in enumerate(words):
                     token = word + (" " if i < len(words) - 1 else "")
@@ -238,26 +222,33 @@ async def chat_stream(
             ]
             yield f"data: {_json.dumps({'type': 'sources', 'sources': sources})}\n\n"
 
-            # Persist if authenticated
+            # Persist if authenticated — repository katmanı kullan
             if not is_guest:
-                from app.db.models import QueryLog, AuditLog
-                db.add_all([
-                    ChatHistory(id=str(uuid.uuid4()), session_id=session_id, role="user", content=req.query, user_id=current_user.id),
-                    ChatHistory(id=str(uuid.uuid4()), session_id=session_id, role="assistant", content=full_answer, user_id=current_user.id),
-                    QueryLog(
-                        id=str(uuid.uuid4()),
-                        session_id=session_id,
-                        query=req.query,
-                        answer=full_answer,
-                        response_time_ms=duration_ms,
-                        sources=[{"document_name": s.get("document_name"), "chunk_id": s.get("chunk_id"), "score": s.get("score")} for s in sources],
-                    ),
-                    AuditLog(id=str(uuid.uuid4()), user_id=current_user.id, action="query", details={"session_id": session_id}),
-                ])
+                _chat_repo2  = ChatRepository(db)
+                _qlog_repo   = QueryLogRepository(db)
+                _audit_repo  = AuditLogRepository(db)
+                await _chat_repo2.add_turn(
+                    session_id=session_id,
+                    query=req.query,
+                    answer=full_answer,
+                    user_id=current_user.id,
+                )
+                await _qlog_repo.log(
+                    session_id=session_id,
+                    query=req.query,
+                    answer=full_answer,
+                    response_time_ms=duration_ms,
+                    sources=[{"document_name": s.get("document_name"), "chunk_id": s.get("chunk_id"), "score": s.get("score")} for s in sources],
+                )
+                await _audit_repo.log(
+                    action="stream_query",
+                    user_id=current_user.id,
+                    details={"session_id": session_id},
+                )
                 await db.commit()
 
             yield f"data: {_json.dumps({'type': 'done'})}\n\n"
-
+            
         except Exception as e:
             yield f"data: {_json.dumps({'type': 'error', 'message': str(e)})}\n\n"
 
@@ -269,34 +260,20 @@ async def chat_stream(
 
 @router.get("/chat/sessions")
 async def get_chat_sessions(
-    current_user: User = Depends(get_current_user_required), 
+    current_user: User = Depends(get_current_user_required),
     db: AsyncSession = Depends(get_db)
 ):
-    from sqlalchemy import select
-    result = await db.execute(
-        select(ChatHistory.session_id, ChatHistory.created_at)
-        .where(ChatHistory.user_id == current_user.id)
-        .order_by(ChatHistory.created_at.desc())
-    )
-    sessions = []
-    seen = set()
-    for row in result.all():
-        if row.session_id not in seen:
-            seen.add(row.session_id)
-            sessions.append({"session_id": row.session_id, "last_activity": row.created_at})
+    chat_repo = ChatRepository(db)
+    sessions = await chat_repo.get_sessions_by_user(current_user.id)
     return {"sessions": sessions}
 
 @router.get("/chat/{session_id}")
 async def get_chat_history(
-    session_id: str, 
-    current_user: User = Depends(get_current_user_required), 
+    session_id: str,
+    current_user: User = Depends(get_current_user_required),
     db: AsyncSession = Depends(get_db)
 ):
-    from sqlalchemy import select
-    result = await db.execute(
-        select(ChatHistory)
-        .where((ChatHistory.session_id == session_id) & (ChatHistory.user_id == current_user.id))
-        .order_by(ChatHistory.created_at.asc())
-    )
-    history = [{"role": h.role, "content": h.content, "created_at": h.created_at} for h in result.scalars().all()]
+    chat_repo = ChatRepository(db)
+    messages = await chat_repo.get_history(session_id, user_id=current_user.id)
+    history = [{"role": h.role, "content": h.content, "created_at": h.created_at} for h in messages]
     return {"session_id": session_id, "history": history}

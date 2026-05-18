@@ -7,15 +7,14 @@ services:
       dockerfile: Dockerfile
     ports:
       - "8000:8000"
+    env_file:
+      - .env
     environment:
-      - ENV=development
-      - DEBUG=true
-      - POSTGRES_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/legalai
+      # .env'i override eder — Docker servis iletişimi için gerekli
+      - POSTGRES_URL=postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-legalai}
       - OPENSEARCH_HOST=opensearch
       - OPENSEARCH_PORT=9200
       - CORS_ORIGINS=["http://localhost:3000","http://frontend-next:3000"]
-    env_file:
-      - .env
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
     depends_on:
       postgres:
@@ -25,16 +24,19 @@ services:
     volumes:
       - ./data:/app/data
       - ./backend:/app
-      - ~/.cache/huggingface:/root/.cache/huggingface
+      - hf_model_cache:/root/.cache/huggingface   # named volume — model indirme cached
     restart: unless-stopped
 
   # ── PostgreSQL ──────────────────────────────────────────────
   postgres:
     image: postgres:15-alpine
+    env_file:
+      - .env
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: legalai
+      # .env'deki POSTGRES_USER / POSTGRES_PASSWORD / POSTGRES_DB kullanılır
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-legalai}
     ports:
       - "5432:5432"
     volumes:
@@ -42,7 +44,7 @@ services:
       - ./sql/schema.sql:/docker-entrypoint-initdb.d/01_schema.sql
       - ./sql/seed.sql:/docker-entrypoint-initdb.d/02_seed.sql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -53,7 +55,8 @@ services:
     image: opensearchproject/opensearch:2.12.0
     environment:
       - discovery.type=single-node
-      - OPENSEARCH_INITIAL_ADMIN_PASSWORD=${OPENSEARCH_ADMIN_PASSWORD:-StrongLegalAI2026_Dev!}
+      # Şifre zorunlu olarak .env'den alınır, fallback yok — deploy öncesi set edin
+      - OPENSEARCH_INITIAL_ADMIN_PASSWORD=${OPENSEARCH_ADMIN_PASSWORD}
       - plugins.security.disabled=true
     ports:
       - "9200:9200"
@@ -87,6 +90,8 @@ services:
       dockerfile: Dockerfile
     ports:
       - "3000:3000"
+    env_file:
+      - .env
     environment:
       - NEXT_PUBLIC_API_URL=http://localhost:8000
     volumes:
@@ -100,5 +105,6 @@ services:
 volumes:
   postgres_data:
   opensearch_data:
-  frontend_node_modules:   # Next.js node_modules cache
-  frontend_next_cache:     # Next.js build output cache
+  hf_model_cache:         # HuggingFace embedding model cache
+  frontend_node_modules:  # Next.js node_modules cache
+  frontend_next_cache:    # Next.js build output cache

@@ -1,9 +1,13 @@
 """
-LLM Service — OpenAI / local LLM çağrıları
+LLM Service — OpenAI / HuggingFace çağrıları
+
+Provider seçimi:
+  - openai      : OpenAI API (GPT-3.5/4/4o vb.)
+  - huggingface : Doğrudan PyTorch inference (ağır, sadece GPU yok ise)
 """
 import re
 import asyncio
-from typing import Optional
+from typing import Optional, AsyncIterator
 from app.core.config import settings
 from app.core.logger import get_logger
 
@@ -79,7 +83,7 @@ class LLMService:
             logger.error(f"[LLM] OpenAI hatası: {e}")
             return self._dummy_response(prompt)
 
-    async def stream_openai(self, prompt: str, system: Optional[str] = None):
+    async def stream_openai(self, prompt: str, system: Optional[str] = None) -> AsyncIterator[str]:
         """OpenAI üzerinden gerçek token-by-token streaming generator."""
         client = self._get_openai_client()
         if client is None:

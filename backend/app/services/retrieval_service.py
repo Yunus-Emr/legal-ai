@@ -23,11 +23,34 @@ class RetrievalService:
         top_k: int = 5,
         filter_doc_ids: Optional[List[str]] = None,
     ) -> List[Dict[str, Any]]:
-        """Metni embed ederek vektör arama yapar."""
-        vector = await embedding_service.embed_text(query, is_query=True)
-        return await self.search_by_vector(
-            vector=vector, top_k=top_k, filter_doc_ids=filter_doc_ids
+        """Varsayılan arama: Hybrid Search kullanır."""
+        return await self.search_hybrid(
+            query=query, top_k=top_k, filter_doc_ids=filter_doc_ids
         )
+
+    async def search_hybrid(
+        self,
+        query: str,
+        top_k: int = 5,
+        filter_doc_ids: Optional[List[str]] = None,
+        alpha: float = 0.7,
+    ) -> List[Dict[str, Any]]:
+        """Hem vektörel hem de metin bazlı arama (Hybrid) yapar."""
+        vector = await embedding_service.embed_text(query, is_query=True)
+        try:
+            from app.vectorstore.opensearch_client import opensearch_client
+            # opensearch_client'taki yeni hybrid_search metodunu çağırıyoruz
+            hits = await opensearch_client.hybrid_search(
+                vector=vector, 
+                query_text=query, 
+                top_k=top_k, 
+                alpha=alpha,
+                filter_doc_ids=filter_doc_ids
+            )
+            return await self._enrich_hits_with_metadata(hits)
+        except Exception as e:
+            logger.warning(f"[Retrieval] OpenSearch Hybrid bağlanamadı: {e}. FAISS kNN fallback")
+            return await self.search_by_vector(vector=vector, top_k=top_k, filter_doc_ids=filter_doc_ids)
 
     async def search_by_vector(
         self,
