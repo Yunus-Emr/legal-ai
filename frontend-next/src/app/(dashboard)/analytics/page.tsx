@@ -6,6 +6,8 @@ import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartsToolti
 import { BrainCircuit, Clock, Coins, TrendingUp, Loader2, AlertCircle } from "lucide-react";
 import { motion } from "framer-motion";
 import { analyticsApi, DashboardStats } from "@/lib/api";
+import { useRouter } from "next/navigation";
+import { useAuthStore } from "@/store/authStore";
 
 export default function AnalyticsPage() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
@@ -13,46 +15,56 @@ export default function AnalyticsPage() {
   const [riskData, setRiskData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const router = useRouter();
+  const { user, isLoadingUser: loadingUser } = useAuthStore();
 
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        setLoading(true);
-        const [statsRes, trendsRes, responseTimeRes] = await Promise.all([
-          analyticsApi.dashboard(),
-          analyticsApi.queryTrends(),
-          analyticsApi.responseTime()
-        ]);
+    if (!loadingUser && user && user.role !== "admin") {
+      router.push("/");
+      return;
+    }
 
-        setStats(statsRes.data);
+    if (user?.role === "admin") {
+      const fetchData = async () => {
+        try {
+          setLoading(true);
+          const [statsRes, trendsRes, responseTimeRes] = await Promise.all([
+            analyticsApi.dashboard(),
+            analyticsApi.queryTrends(),
+            analyticsApi.responseTime()
+          ]);
 
-        // Format trends for AreaChart
-        const formattedTrends = trendsRes.data.map(d => ({
-          name: new Date(d.date).toLocaleDateString('en-US', { weekday: 'short' }),
-          tokens: d.queries * 150 // Assuming average 150 tokens per query for demonstration
-        }));
-        // If empty, provide some default shape
-        setTokenData(formattedTrends.length > 0 ? formattedTrends : [
-          { name: 'Mon', tokens: 0 }, { name: 'Tue', tokens: 0 }
-        ]);
+          setStats(statsRes.data);
 
-        // Format response times for BarChart (reusing riskData layout but for response times)
-        const formattedResp = responseTimeRes.data.map(d => ({
-          name: d.range,
-          value: d.count
-        }));
-        setRiskData(formattedResp.length > 0 ? formattedResp : [
-          { name: '0-1s', value: 0 }, { name: '1-2s', value: 0 }, { name: '5s+', value: 0 }
-        ]);
+          // Format trends for AreaChart
+          const formattedTrends = trendsRes.data.map(d => ({
+            name: new Date(d.date).toLocaleDateString('en-US', { weekday: 'short' }),
+            tokens: d.queries * 150 // Assuming average 150 tokens per query for demonstration
+          }));
+          // If empty, provide some default shape
+          setTokenData(formattedTrends.length > 0 ? formattedTrends : [
+            { name: 'Mon', tokens: 0 }, { name: 'Tue', tokens: 0 }
+          ]);
 
-      } catch (err: any) {
-        setError(err.response?.data?.detail || "Analytics verileri alınamadı.");
-      } finally {
-        setLoading(false);
+          // Format response times for BarChart (reusing riskData layout but for response times)
+          const formattedResp = responseTimeRes.data.map(d => ({
+            name: d.range,
+            value: d.count
+          }));
+          setRiskData(formattedResp.length > 0 ? formattedResp : [
+            { name: '0-1s', value: 0 }, { name: '1-2s', value: 0 }, { name: '5s+', value: 0 }
+          ]);
+
+        } catch (err: any) {
+          setError(err.response?.data?.detail || "Analytics verileri alınamadı.");
+        } finally {
+          setLoading(false);
+        }
+      };
+      if (user?.role === "admin") {
+        fetchData();
       }
-    };
-    fetchData();
-  }, []);
+    } [user, loadingUser, router]);
 
   if (loading) {
     return <div className="p-8 h-full flex items-center justify-center text-muted-foreground"><Loader2 className="w-6 h-6 animate-spin mr-2" /> Loading analytics...</div>;
@@ -120,14 +132,14 @@ export default function AnalyticsPage() {
                 <AreaChart data={tokenData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                   <defs>
                     <linearGradient id="colorTokens" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#7C3AED" stopOpacity={0.3}/>
-                      <stop offset="95%" stopColor="#7C3AED" stopOpacity={0}/>
+                      <stop offset="5%" stopColor="#7C3AED" stopOpacity={0.3} />
+                      <stop offset="95%" stopColor="#7C3AED" stopOpacity={0} />
                     </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#1E2D45" />
                   <XAxis dataKey="name" stroke="#64748B" fontSize={12} tickLine={false} axisLine={false} />
                   <YAxis stroke="#64748B" fontSize={12} tickLine={false} axisLine={false} />
-                  <RechartsTooltip 
+                  <RechartsTooltip
                     contentStyle={{ backgroundColor: '#111827', borderColor: '#1E2D45', borderRadius: '8px' }}
                     itemStyle={{ color: '#F8FAFC' }}
                   />
@@ -150,8 +162,8 @@ export default function AnalyticsPage() {
                   <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#1E2D45" />
                   <XAxis type="number" stroke="#64748B" fontSize={12} tickLine={false} axisLine={false} />
                   <YAxis dataKey="name" type="category" stroke="#64748B" fontSize={12} tickLine={false} axisLine={false} />
-                  <RechartsTooltip 
-                    cursor={{fill: '#1A2235'}}
+                  <RechartsTooltip
+                    cursor={{ fill: '#1A2235' }}
                     contentStyle={{ backgroundColor: '#111827', borderColor: '#1E2D45', borderRadius: '8px' }}
                   />
                   <Bar dataKey="value" radius={[0, 4, 4, 0]}>

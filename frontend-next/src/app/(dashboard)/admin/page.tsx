@@ -8,31 +8,42 @@ import { Input } from "@/components/ui/input";
 import { Users, Settings, Shield, CreditCard, Plug, Search, Plus } from "lucide-react";
 import { motion } from "framer-motion";
 import { adminApi, AdminUser } from "@/lib/api";
+import { useRouter } from "next/navigation";
+import { useAuthStore } from "@/store/authStore";
 
 export default function AdminPage() {
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [config, setConfig] = useState<any>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const router = useRouter();
+  const { user, isLoadingUser: loadingUser } = useAuthStore();
 
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        setLoading(true);
-        const [usersRes, configRes] = await Promise.all([
-          adminApi.users(),
-          adminApi.config()
-        ]);
-        setUsers(usersRes.data);
-        setConfig(configRes.data);
-      } catch (err: any) {
-        setError(err.response?.data?.detail || "Admin verileri alınamadı. Yetkiniz olmayabilir.");
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchData();
-  }, []);
+    if (!loadingUser && user && user.role !== "admin") {
+      router.push("/");
+      return;
+    }
+    
+    if (user?.role === "admin") {
+      const fetchData = async () => {
+        try {
+          setLoading(true);
+          const [usersRes, configRes] = await Promise.all([
+            adminApi.users(),
+            adminApi.config()
+          ]);
+          setUsers(usersRes.data);
+          setConfig(configRes.data);
+        } catch (err: any) {
+          setError(err.response?.data?.detail || "Admin verileri alınamadı. Yetkiniz olmayabilir.");
+        } finally {
+          setLoading(false);
+        }
+      };
+      fetchData();
+    }
+  }, [user, loadingUser, router]);
 
   const formatDate = (dateStr: string) => {
     return new Date(dateStr).toLocaleDateString("tr-TR", {

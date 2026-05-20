@@ -2,8 +2,22 @@
 
 import { Card, CardContent } from "@/components/ui/card";
 import { ShieldCheck, AlertTriangle, CheckCircle } from "lucide-react";
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { useAuthStore } from "@/store/authStore";
 
 export default function CompliancePage() {
+  const router = useRouter();
+  const { user, isLoadingUser: loadingUser } = useAuthStore();
+
+  useEffect(() => {
+    if (!loadingUser && user && user.role !== "admin") {
+      router.push("/");
+    }
+  }, [user, loadingUser, router]);
+
+  if (!user || user.role !== "admin") return null;
+
   return (
     <div className="p-8 h-full flex flex-col font-sans">
       <div className="mb-8">

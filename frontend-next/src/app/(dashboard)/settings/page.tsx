@@ -4,8 +4,22 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Monitor, Moon, Sun, ShieldCheck, Laptop, BrainCircuit, Globe, Bell, LogOut, CheckCircle2 } from "lucide-react";
 import { motion } from "framer-motion";
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { useAuthStore } from "@/store/authStore";
 
 export default function SettingsPage() {
+  const router = useRouter();
+  const { user, isLoadingUser: loadingUser } = useAuthStore();
+
+  useEffect(() => {
+    if (!loadingUser && user && user.role !== "admin") {
+      router.push("/");
+    }
+  }, [user, loadingUser, router]);
+
+  if (!user || user.role !== "admin") return null;
+
   return (
     <div className="p-8 h-full flex flex-col font-sans max-w-6xl mx-auto">
       <div className="mb-8">

@@ -105,18 +105,29 @@ export function Sidebar() {
 
       {/* Navigation */}
       <div className="flex-1 overflow-y-auto py-4 space-y-6 overflow-x-hidden">
-        {NAVIGATION.map((section, idx) => (
-          <div key={idx} className="px-3">
-            {!isCollapsed && (
-              <div className="text-[10px] font-bold text-muted-foreground/60 uppercase tracking-widest mb-2 px-3">
-                {section.category}
-              </div>
-            )}
-            {isCollapsed && <div className="h-4" />}
+        {NAVIGATION.map((section, idx) => {
+          // Role-based filtering
+          if (section.category === "MANAGEMENT" && !isAdmin) return null;
+          
+          let itemsToRender = section.items;
+          if (section.category === "LEGAL TOOLS" && !isAdmin) {
+            itemsToRender = itemsToRender.filter(item => item.label !== "Compliance");
+          }
 
-            <nav className="space-y-1">
-              {section.items.map((item) => {
-                const isActive = pathname === item.href;
+          if (itemsToRender.length === 0) return null;
+
+          return (
+            <div key={idx} className="px-3">
+              {!isCollapsed && (
+                <div className="text-[10px] font-bold text-muted-foreground/60 uppercase tracking-widest mb-2 px-3">
+                  {section.category}
+                </div>
+              )}
+              {isCollapsed && <div className="h-4" />}
+
+              <nav className="space-y-1">
+                {itemsToRender.map((item) => {
+                  const isActive = pathname === item.href;
                 const linkContent = (
                   <Link
                     href={item.href}
@@ -159,7 +170,8 @@ export function Sidebar() {
               })}
             </nav>
           </div>
-        ))}
+          );
+        })}
 
         {/* Admin only */}
         {isAdmin && (
