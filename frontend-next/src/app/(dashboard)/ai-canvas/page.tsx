@@ -131,7 +131,7 @@ export default function AICanvasPage() {
             )}
           </div>
           
-          <ScrollArea className="flex-1 p-8 bg-[#0A0E1A]">
+          <ScrollArea className="flex-1 p-8 bg-transparent">
             {!selectedDoc ? (
               <div className="max-w-3xl mx-auto space-y-4">
                 <h2 className="text-xl font-semibold mb-6">Your Corpus</h2>
@@ -260,7 +260,7 @@ export default function AICanvasPage() {
                       
                       {/* Message Content */}
                       {isUser ? (
-                        <div className="bg-[#1A2235] border border-border p-4 rounded-xl rounded-tr-none text-sm text-foreground shadow-sm max-w-[85%] font-sans whitespace-pre-wrap">
+                        <div className="glass-panel border border-border p-4 rounded-xl rounded-tr-none text-sm text-foreground shadow-sm max-w-[85%] font-sans whitespace-pre-wrap">
                           {msg.content}
                         </div>
                       ) : (
@@ -315,7 +315,7 @@ export default function AICanvasPage() {
 
           {/* Input Area */}
           <div className="p-4 glass-panel rounded-none border-x-0 border-b-0 shrink-0">
-            <div className="relative flex flex-col gap-2 bg-[#0A0E1A] rounded-xl border border-border p-2 focus-within:ring-1 focus-within:ring-[#7C3AED] focus-within:border-[#7C3AED] transition-all shadow-inner">
+            <div className="relative flex flex-col gap-2 glass-panel rounded-xl border border-border p-2 focus-within:ring-1 focus-within:ring-[#7C3AED] focus-within:border-[#7C3AED] transition-all shadow-inner">
               
               <Textarea 
                 placeholder="Instruct AI Co-Counsel... (Type '/' for commands)" 

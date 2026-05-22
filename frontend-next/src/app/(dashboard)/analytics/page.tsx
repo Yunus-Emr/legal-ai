@@ -6,65 +6,51 @@ import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartsToolti
 import { BrainCircuit, Clock, Coins, TrendingUp, Loader2, AlertCircle } from "lucide-react";
 import { motion } from "framer-motion";
 import { analyticsApi, DashboardStats } from "@/lib/api";
-import { useRouter } from "next/navigation";
-import { useAuthStore } from "@/store/authStore";
+import { RoleGuard } from "@/components/auth/RoleGuard";
 
-export default function AnalyticsPage() {
+function AnalyticsContent() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [tokenData, setTokenData] = useState<any[]>([]);
   const [riskData, setRiskData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const router = useRouter();
-  const { user, isLoadingUser: loadingUser } = useAuthStore();
 
   useEffect(() => {
-    if (!loadingUser && user && user.role !== "admin") {
-      router.push("/");
-      return;
-    }
+    const fetchData = async () => {
+      try {
+        setLoading(true);
+        const [statsRes, trendsRes, responseTimeRes] = await Promise.all([
+          analyticsApi.dashboard(),
+          analyticsApi.queryTrends(),
+          analyticsApi.responseTime()
+        ]);
 
-    if (user?.role === "admin") {
-      const fetchData = async () => {
-        try {
-          setLoading(true);
-          const [statsRes, trendsRes, responseTimeRes] = await Promise.all([
-            analyticsApi.dashboard(),
-            analyticsApi.queryTrends(),
-            analyticsApi.responseTime()
-          ]);
+        setStats(statsRes.data);
 
-          setStats(statsRes.data);
+        const formattedTrends = trendsRes.data.map(d => ({
+          name: new Date(d.date).toLocaleDateString('en-US', { weekday: 'short' }),
+          tokens: d.queries * 150
+        }));
+        setTokenData(formattedTrends.length > 0 ? formattedTrends : [
+          { name: 'Mon', tokens: 0 }, { name: 'Tue', tokens: 0 }
+        ]);
 
-          // Format trends for AreaChart
-          const formattedTrends = trendsRes.data.map(d => ({
-            name: new Date(d.date).toLocaleDateString('en-US', { weekday: 'short' }),
-            tokens: d.queries * 150 // Assuming average 150 tokens per query for demonstration
-          }));
-          // If empty, provide some default shape
-          setTokenData(formattedTrends.length > 0 ? formattedTrends : [
-            { name: 'Mon', tokens: 0 }, { name: 'Tue', tokens: 0 }
-          ]);
+        const formattedResp = responseTimeRes.data.map(d => ({
+          name: d.range,
+          value: d.count
+        }));
+        setRiskData(formattedResp.length > 0 ? formattedResp : [
+          { name: '0-1s', value: 0 }, { name: '1-2s', value: 0 }, { name: '5s+', value: 0 }
+        ]);
 
-          // Format response times for BarChart (reusing riskData layout but for response times)
-          const formattedResp = responseTimeRes.data.map(d => ({
-            name: d.range,
-            value: d.count
-          }));
-          setRiskData(formattedResp.length > 0 ? formattedResp : [
-            { name: '0-1s', value: 0 }, { name: '1-2s', value: 0 }, { name: '5s+', value: 0 }
-          ]);
-
-        } catch (err: any) {
-          setError(err.response?.data?.detail || "Analytics verileri alınamadı.");
-        } finally {
-          setLoading(false);
-        }
-      };
-      if (user?.role === "admin") {
-        fetchData();
+      } catch (err: any) {
+        setError(err.response?.data?.detail || "Analytics verileri alınamadı.");
+      } finally {
+        setLoading(false);
       }
-    } [user, loadingUser, router]);
+    };
+    fetchData();
+  }, []);
 
   if (loading) {
     return <div className="p-8 h-full flex items-center justify-center text-muted-foreground"><Loader2 className="w-6 h-6 animate-spin mr-2" /> Loading analytics...</div>;
@@ -178,5 +164,13 @@ export default function AnalyticsPage() {
         </motion.div>
       </div>
     </div>
+  );
+}
+
+export default function AnalyticsPage() {
+  return (
+    <RoleGuard allowedRoles={["admin"]} redirectTo="/">
+      <AnalyticsContent />
+    </RoleGuard>
   );
 }

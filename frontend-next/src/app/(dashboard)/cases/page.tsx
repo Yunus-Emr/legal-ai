@@ -1,139 +1,371 @@
 "use client";
 
-import { useState } from "react";
+/**
+ * Cases / Matters Page
+ *
+ * - Tablo, Kanban ve Grid görünümleri
+ * - Static seed data — backend /api/v1/matters endpoint'i hazır olunca
+ *   useEffect içindeki fetchMatters() aktif edilecek (TODO satırları işaretlendi)
+ * - Yeni Matter modal (Create) — form state ile hazır
+ */
+
+import { useState, useMemo } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Search, Filter, LayoutGrid, List, KanbanSquare, MoreHorizontal } from "lucide-react";
-import { motion } from "framer-motion";
+import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Search,
+  Filter,
+  LayoutGrid,
+  List,
+  KanbanSquare,
+  MoreHorizontal,
+  Plus,
+  Briefcase,
+  Calendar,
+  User,
+  AlertTriangle,
+  X,
+  ChevronRight,
+} from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 
-const CASES = [
-  { id: "MAT-2024-081", title: "TechCorp M&A Deal", client: "TechCorp Inc.", type: "Corporate", status: "Active", risk: "High", updated: "2h ago" },
-  { id: "MAT-2024-092", title: "Smith vs Global Logistics", client: "Global Logistics", type: "Litigation", status: "Discovery", risk: "Medium", updated: "1d ago" },
-  { id: "MAT-2024-104", title: "Q3 Vendor Agreements", client: "Internal", type: "Compliance", status: "Review", risk: "Low", updated: "3d ago" },
+/* ── Types ─────────────────────────────────────────────────────────────── */
+type RiskLevel = "High" | "Medium" | "Low";
+type CaseStatus = "Active" | "Discovery" | "Review" | "Pending" | "Closed";
+
+interface Matter {
+  id: string;
+  title: string;
+  client: string;
+  type: string;
+  status: CaseStatus;
+  risk: RiskLevel;
+  updated: string;
+  attorney: string;
+  dueDate: string;
+}
+
+/* ── Seed Data ─────────────────────────────────────────────────────────── */
+// TODO: replace with API call: const res = await api.get("/api/v1/matters");
+const SEED_CASES: Matter[] = [
+  { id: "MAT-2026-081", title: "TechCorp M&A Due Diligence", client: "TechCorp Inc.", type: "Corporate", status: "Active", risk: "High", updated: "2 saat önce", attorney: "Atty. Yılmaz", dueDate: "2026-06-15" },
+  { id: "MAT-2026-092", title: "Smith vs Global Logistics", client: "Global Logistics", type: "Litigation", status: "Discovery", risk: "Medium", updated: "1 gün önce", attorney: "Atty. Arslan", dueDate: "2026-07-01" },
+  { id: "MAT-2026-104", title: "Q3 Vendor Agreements", client: "Internal", type: "Compliance", status: "Review", risk: "Low", updated: "3 gün önce", attorney: "Atty. Çelik", dueDate: "2026-05-30" },
+  { id: "MAT-2026-115", title: "İşçi Hakları Davası", client: "Aksan Metal A.Ş.", type: "Labour", status: "Pending", risk: "High", updated: "5 gün önce", attorney: "Atty. Yılmaz", dueDate: "2026-06-20" },
+  { id: "MAT-2026-120", title: "Marka Tescil Başvurusu", client: "Nova Teknoloji", type: "IP", status: "Active", risk: "Low", updated: "1 hafta önce", attorney: "Atty. Çelik", dueDate: "2026-08-10" },
+  { id: "MAT-2026-133", title: "Kira Sözleşmesi Uyuşmazlığı", client: "Deniz Holding", type: "Property", status: "Active", risk: "Medium", updated: "2 hafta önce", attorney: "Atty. Arslan", dueDate: "2026-07-25" },
 ];
 
-export default function CasesPage() {
-  const [view, setView] = useState("table");
+const KANBAN_COLS: CaseStatus[] = ["Pending", "Discovery", "Review", "Active", "Closed"];
+
+const RISK_DOT: Record<RiskLevel, string> = {
+  High: "bg-danger shadow-[0_0_8px_rgba(239,68,68,0.5)]",
+  Medium: "bg-warning shadow-[0_0_8px_rgba(245,158,11,0.5)]",
+  Low: "bg-success shadow-[0_0_8px_rgba(16,185,129,0.5)]",
+};
+
+const STATUS_BADGE: Record<CaseStatus, string> = {
+  Active: "bg-primary/10 text-primary border-primary/30",
+  Discovery: "bg-info/10 text-info border-info/30",
+  Review: "bg-warning/10 text-warning border-warning/30",
+  Pending: "bg-muted text-muted-foreground border-border",
+  Closed: "bg-elevated text-muted-foreground border-border",
+};
+
+/* ── New Matter Modal ──────────────────────────────────────────────────── */
+interface NewMatterModalProps { onClose: () => void; onSave: (m: Matter) => void; }
+
+function NewMatterModal({ onClose, onSave }: NewMatterModalProps) {
+  const [title, setTitle] = useState("");
+  const [client, setClient] = useState("");
+  const [type, setType] = useState("Corporate");
+  const [attorney, setAttorney] = useState("");
+  const [dueDate, setDueDate] = useState("");
+
+  const handleSave = () => {
+    if (!title.trim() || !client.trim()) return;
+    const newMatter: Matter = {
+      id: `MAT-2026-${Math.floor(100 + Math.random() * 900)}`,
+      title, client, type,
+      status: "Pending",
+      risk: "Low",
+      updated: "Şimdi",
+      attorney: attorney || "Unassigned",
+      dueDate: dueDate || "—",
+    };
+    onSave(newMatter);
+    onClose();
+  };
 
   return (
-    <div className="p-8 h-full flex flex-col">
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.95 }}
+        className="relative z-10 w-full max-w-lg bg-[#111827] border border-border rounded-2xl shadow-2xl p-6"
+      >
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="text-lg font-semibold">Yeni Matter Aç</h2>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-elevated text-muted-foreground hover:text-foreground">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        <div className="space-y-4">
+          <div>
+            <label className="text-sm font-medium text-foreground block mb-1.5">Matter Başlığı *</label>
+            <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="E.g., Smith vs. Corp — Dava" className="bg-elevated border-border" />
+          </div>
+          <div>
+            <label className="text-sm font-medium text-foreground block mb-1.5">Müvekkil *</label>
+            <Input value={client} onChange={(e) => setClient(e.target.value)} placeholder="Müvekkil adı veya kurum" className="bg-elevated border-border" />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="text-sm font-medium text-foreground block mb-1.5">Tür</label>
+              <select value={type} onChange={(e) => setType(e.target.value)} className="w-full bg-elevated border border-border rounded-lg p-2.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary">
+                {["Corporate", "Litigation", "Compliance", "Labour", "IP", "Property", "Criminal", "Family"].map((t) => (
+                  <option key={t} value={t}>{t}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="text-sm font-medium text-foreground block mb-1.5">Vade Tarihi</label>
+              <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} className="bg-elevated border-border" />
+            </div>
+          </div>
+          <div>
+            <label className="text-sm font-medium text-foreground block mb-1.5">Sorumlu Avukat</label>
+            <Input value={attorney} onChange={(e) => setAttorney(e.target.value)} placeholder="Atty. Yılmaz" className="bg-elevated border-border" />
+          </div>
+        </div>
+
+        <div className="flex justify-end gap-3 mt-6">
+          <Button variant="outline" onClick={onClose} className="border-border">İptal</Button>
+          <Button onClick={handleSave} disabled={!title.trim() || !client.trim()} className="bg-primary text-white">
+            Matter Oluştur
+          </Button>
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
+/* ── Main ──────────────────────────────────────────────────────────────── */
+export default function CasesPage() {
+  const [view, setView] = useState<"table" | "kanban" | "grid">("table");
+  const [search, setSearch] = useState("");
+  const [showModal, setShowModal] = useState(false);
+  const [cases, setCases] = useState<Matter[]>(SEED_CASES);
+
+  const filtered = useMemo(
+    () => cases.filter((c) =>
+      c.title.toLowerCase().includes(search.toLowerCase()) ||
+      c.client.toLowerCase().includes(search.toLowerCase()) ||
+      c.id.toLowerCase().includes(search.toLowerCase())
+    ),
+    [cases, search]
+  );
+
+  const handleAddMatter = (m: Matter) => setCases((prev) => [m, ...prev]);
+
+  return (
+    <div className="p-6 lg:p-8 h-full flex flex-col font-sans">
+      {/* Header */}
       <div className="flex justify-between items-end mb-8 shrink-0">
         <div>
           <h1 className="text-3xl font-semibold tracking-tight">My Cases</h1>
-          <p className="text-sm text-muted-foreground mt-1">Manage active matters, monitor risks, and coordinate legal teams.</p>
+          <p className="text-sm text-muted-foreground mt-1">Aktif davaları, riskleri ve ekip koordinasyonunu yönetin.</p>
         </div>
-        <Button className="bg-primary hover:bg-primary/90 text-white">New Matter</Button>
+        <Button onClick={() => setShowModal(true)} className="bg-primary hover:bg-primary/90 text-white">
+          <Plus className="w-4 h-4 mr-2" /> New Matter
+        </Button>
       </div>
 
-      <div className="flex items-center justify-between mb-6 shrink-0">
-        <div className="flex items-center gap-4">
-          <div className="relative">
+      {/* Toolbar */}
+      <div className="flex items-center justify-between mb-6 shrink-0 gap-4">
+        <div className="flex items-center gap-3 flex-1">
+          <div className="relative max-w-sm flex-1">
             <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-            <Input placeholder="Search cases..." className="pl-9 w-[300px] bg-elevated border-border" />
+            <Input
+              placeholder="Matter, müvekkil veya ID ara..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-9 bg-elevated border-border"
+            />
           </div>
-          <Button variant="outline" className="border-border bg-transparent hover:bg-elevated text-muted-foreground">
-            <Filter className="w-4 h-4 mr-2" /> Filters
+          <Button variant="outline" size="sm" className="border-border bg-transparent hover:bg-elevated text-muted-foreground">
+            <Filter className="w-4 h-4 mr-2" /> Filtrele
           </Button>
+          {search && (
+            <span className="text-xs text-muted-foreground">{filtered.length} sonuç</span>
+          )}
         </div>
 
-        <Tabs value={view} onValueChange={setView} className="w-auto">
-          <TabsList className="bg-elevated border border-border">
-            <TabsTrigger value="table"><List className="w-4 h-4" /></TabsTrigger>
-            <TabsTrigger value="kanban"><KanbanSquare className="w-4 h-4" /></TabsTrigger>
-            <TabsTrigger value="grid"><LayoutGrid className="w-4 h-4" /></TabsTrigger>
+        <Tabs value={view} onValueChange={(v) => setView(v as typeof view)} className="w-auto">
+          <TabsList className="bg-elevated border border-border h-9 p-1">
+            <TabsTrigger value="table" className="px-2.5 h-full data-[state=active]:bg-surface"><List className="w-4 h-4" /></TabsTrigger>
+            <TabsTrigger value="kanban" className="px-2.5 h-full data-[state=active]:bg-surface"><KanbanSquare className="w-4 h-4" /></TabsTrigger>
+            <TabsTrigger value="grid" className="px-2.5 h-full data-[state=active]:bg-surface"><LayoutGrid className="w-4 h-4" /></TabsTrigger>
           </TabsList>
         </Tabs>
       </div>
 
-      <div className="flex-1 overflow-auto">
-        {view === "table" && (
-          <div className="border border-border rounded-lg bg-surface overflow-hidden">
-            <table className="w-full text-sm text-left">
-              <thead className="bg-elevated text-muted-foreground text-xs uppercase tracking-wider">
-                <tr>
-                  <th className="px-6 py-4 font-medium">Matter ID</th>
-                  <th className="px-6 py-4 font-medium">Title</th>
-                  <th className="px-6 py-4 font-medium">Client</th>
-                  <th className="px-6 py-4 font-medium">Status</th>
-                  <th className="px-6 py-4 font-medium">AI Risk Score</th>
-                  <th className="px-6 py-4 font-medium">Last Updated</th>
-                  <th className="px-6 py-4"></th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {CASES.map((c, i) => (
-                  <motion.tr 
-                    key={c.id}
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: i * 0.05 }}
-                    className="hover:bg-elevated/50 transition-colors group cursor-pointer"
-                  >
-                    <td className="px-6 py-4 font-mono text-muted-foreground">{c.id}</td>
-                    <td className="px-6 py-4 font-medium text-foreground group-hover:text-primary transition-colors">{c.title}</td>
-                    <td className="px-6 py-4 text-muted-foreground">{c.client}</td>
-                    <td className="px-6 py-4">
-                      <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-secondary text-secondary-foreground border border-border">
-                        {c.status}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-2">
-                        <div className={`w-2 h-2 rounded-full ${
-                          c.risk === 'High' ? 'bg-danger shadow-[0_0_8px_rgba(239,68,68,0.5)]' : 
-                          c.risk === 'Medium' ? 'bg-warning shadow-[0_0_8px_rgba(245,158,11,0.5)]' : 
-                          'bg-success shadow-[0_0_8px_rgba(16,185,129,0.5)]'
-                        }`}></div>
-                        <span className="text-muted-foreground">{c.risk}</span>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 text-muted-foreground">{c.updated}</td>
-                    <td className="px-6 py-4 text-right">
-                      <button className="p-1 rounded hover:bg-background text-muted-foreground"><MoreHorizontal className="w-4 h-4" /></button>
-                    </td>
-                  </motion.tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+      {/* Content */}
+      <div className="flex-1 overflow-auto min-h-0">
+        <AnimatePresence mode="wait">
 
-        {view === "kanban" && (
-          <div className="flex gap-6 h-full pb-4">
-            {["Discovery", "Review", "Active", "Closed"].map((col) => (
-              <div key={col} className="w-[300px] shrink-0 flex flex-col gap-3">
-                <div className="flex items-center justify-between">
-                  <h3 className="font-medium text-sm text-muted-foreground uppercase tracking-wider">{col}</h3>
-                  <span className="text-xs bg-elevated px-2 py-0.5 rounded text-muted-foreground font-mono">
-                    {CASES.filter(c => c.status === col || (col==='Active' && c.status==='Active')).length}
-                  </span>
-                </div>
-                <div className="flex-1 bg-elevated/30 rounded-xl border border-border border-dashed p-3 space-y-3">
-                  {CASES.filter(c => c.status === col || (col==='Active' && c.status==='Active')).map((c) => (
-                    <Card key={c.id} className="bg-surface border-border card-lift cursor-pointer">
-                      <CardContent className="p-4 flex flex-col gap-3">
-                        <div className="flex justify-between items-start">
-                          <span className="text-[10px] font-mono text-muted-foreground">{c.id}</span>
-                          <div className={`w-2 h-2 rounded-full ${
-                            c.risk === 'High' ? 'bg-danger' : c.risk === 'Medium' ? 'bg-warning' : 'bg-success'
-                          }`}></div>
-                        </div>
-                        <h4 className="font-medium text-sm">{c.title}</h4>
-                        <div className="flex items-center justify-between text-xs text-muted-foreground">
-                          <span>{c.client}</span>
-                          <span>{c.updated}</span>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
+          {/* TABLE VIEW */}
+          {view === "table" && (
+            <motion.div key="table" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+              <div className="border border-border rounded-xl bg-surface overflow-hidden">
+                <table className="w-full text-sm text-left">
+                  <thead className="bg-elevated text-muted-foreground text-xs uppercase tracking-wider border-b border-border">
+                    <tr>
+                      <th className="px-5 py-3.5 font-medium">Matter</th>
+                      <th className="px-5 py-3.5 font-medium">Müvekkil</th>
+                      <th className="px-5 py-3.5 font-medium">Tür</th>
+                      <th className="px-5 py-3.5 font-medium">Durum</th>
+                      <th className="px-5 py-3.5 font-medium">AI Risk</th>
+                      <th className="px-5 py-3.5 font-medium">Sorumlu</th>
+                      <th className="px-5 py-3.5 font-medium">Güncelleme</th>
+                      <th className="px-5 py-3.5" />
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {filtered.map((c, i) => (
+                      <motion.tr
+                        key={c.id}
+                        initial={{ opacity: 0, y: 5 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: i * 0.04 }}
+                        className="hover:bg-elevated/50 transition-colors group cursor-pointer"
+                      >
+                        <td className="px-5 py-3.5">
+                          <p className="font-medium text-foreground group-hover:text-primary transition-colors">{c.title}</p>
+                          <p className="text-[10px] font-mono text-muted-foreground">{c.id}</p>
+                        </td>
+                        <td className="px-5 py-3.5 text-muted-foreground">{c.client}</td>
+                        <td className="px-5 py-3.5 text-muted-foreground text-xs">{c.type}</td>
+                        <td className="px-5 py-3.5">
+                          <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold border uppercase tracking-wider ${STATUS_BADGE[c.status]}`}>
+                            {c.status}
+                          </span>
+                        </td>
+                        <td className="px-5 py-3.5">
+                          <div className="flex items-center gap-2">
+                            <div className={`w-2 h-2 rounded-full ${RISK_DOT[c.risk]}`} />
+                            <span className="text-xs text-muted-foreground">{c.risk}</span>
+                          </div>
+                        </td>
+                        <td className="px-5 py-3.5 text-xs text-muted-foreground">{c.attorney}</td>
+                        <td className="px-5 py-3.5 text-xs text-muted-foreground">{c.updated}</td>
+                        <td className="px-5 py-3.5 text-right">
+                          <button className="p-1.5 rounded-lg hover:bg-elevated text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity">
+                            <MoreHorizontal className="w-4 h-4" />
+                          </button>
+                        </td>
+                      </motion.tr>
+                    ))}
+                    {filtered.length === 0 && (
+                      <tr>
+                        <td colSpan={8} className="px-5 py-12 text-center text-muted-foreground">
+                          <Briefcase className="w-8 h-8 mx-auto mb-2 opacity-20" />
+                          Eşleşen matter bulunamadı.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
               </div>
-            ))}
-          </div>
-        )}
+            </motion.div>
+          )}
+
+          {/* KANBAN VIEW */}
+          {view === "kanban" && (
+            <motion.div key="kanban" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              className="flex gap-4 h-full pb-4 overflow-x-auto"
+            >
+              {KANBAN_COLS.map((col) => {
+                const colCases = filtered.filter((c) => c.status === col);
+                return (
+                  <div key={col} className="w-72 shrink-0 flex flex-col gap-3">
+                    <div className="flex items-center justify-between px-1">
+                      <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-widest">{col}</h3>
+                      <span className="text-xs bg-elevated px-2 py-0.5 rounded font-mono text-muted-foreground">{colCases.length}</span>
+                    </div>
+                    <div className="flex-1 bg-elevated/20 rounded-xl border border-dashed border-border p-3 space-y-3 min-h-[200px]">
+                      {colCases.map((c) => (
+                        <Card key={c.id} className="bg-surface border-border hover:border-primary/40 cursor-pointer transition-all">
+                          <CardContent className="p-4 space-y-3">
+                            <div className="flex justify-between items-start">
+                              <span className="text-[10px] font-mono text-muted-foreground">{c.id}</span>
+                              <div className={`w-2 h-2 rounded-full ${RISK_DOT[c.risk]}`} />
+                            </div>
+                            <h4 className="text-sm font-medium text-foreground leading-snug">{c.title}</h4>
+                            <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                              <span className="flex items-center gap-1"><User className="w-3 h-3" />{c.client}</span>
+                              <span className="flex items-center gap-1"><Calendar className="w-3 h-3" />{c.dueDate}</span>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </motion.div>
+          )}
+
+          {/* GRID VIEW */}
+          {view === "grid" && (
+            <motion.div key="grid" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4"
+            >
+              {filtered.map((c, i) => (
+                <motion.div key={c.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}>
+                  <Card className="bg-surface border-border hover:border-primary/40 cursor-pointer transition-all group">
+                    <CardContent className="p-5 space-y-4">
+                      <div className="flex justify-between items-start">
+                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold border uppercase tracking-wider ${STATUS_BADGE[c.status]}`}>
+                          {c.status}
+                        </span>
+                        <div className="flex items-center gap-1.5">
+                          {c.risk === "High" && <AlertTriangle className="w-3.5 h-3.5 text-danger" />}
+                          <div className={`w-2 h-2 rounded-full ${RISK_DOT[c.risk]}`} />
+                          <span className="text-xs text-muted-foreground">{c.risk}</span>
+                        </div>
+                      </div>
+                      <div>
+                        <h3 className="font-semibold text-foreground group-hover:text-primary transition-colors">{c.title}</h3>
+                        <p className="text-xs text-muted-foreground mt-1">{c.type} • {c.client}</p>
+                      </div>
+                      <div className="flex items-center justify-between text-xs text-muted-foreground border-t border-border pt-3">
+                        <span className="flex items-center gap-1"><User className="w-3 h-3" />{c.attorney}</span>
+                        <span className="flex items-center gap-1 group-hover:text-primary transition-colors">
+                          Detay <ChevronRight className="w-3 h-3" />
+                        </span>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </motion.div>
+              ))}
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
+
+      {/* Modal */}
+      <AnimatePresence>
+        {showModal && (
+          <NewMatterModal onClose={() => setShowModal(false)} onSave={handleAddMatter} />
+        )}
+      </AnimatePresence>
     </div>
   );
 }

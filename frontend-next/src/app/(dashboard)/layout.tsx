@@ -13,7 +13,7 @@ export default function DashboardLayout({
         <Sidebar />
         <div className="flex-1 flex flex-col min-w-0 h-full">
           <TopBar />
-          <main className="flex-1 overflow-y-auto relative bg-[#0A0E1A]">
+          <main className="flex-1 overflow-y-auto relative bg-transparent">
             {children}
           </main>
         </div>

@@ -22,11 +22,11 @@ function getInitials(name: string): string {
 
 export function TopBar() {
   const router = useRouter();
-  const { user, token, setUser, logout } = useAuthStore();
+  const { user, isAuthenticated, setUser, logout } = useAuthStore();
 
   // Kullanıcı bilgisi store'da yoksa /me endpoint'inden çek
   useEffect(() => {
-    if (token && !user) {
+    if (isAuthenticated && !user) {
       authApi
         .me()
         .then(({ data }) => setUser(data))
@@ -35,12 +35,12 @@ export function TopBar() {
           router.push("/login");
         });
     }
-  }, [token, user, setUser, logout, router]);
+  }, [isAuthenticated, user, setUser, logout, router]);
 
   const handleLogout = () => {
     logout();
-    // Cookie'yi de temizle
     document.cookie = "lexai_token=; path=/; max-age=0";
+    document.cookie = "lexai_role=; path=/; max-age=0";
     router.push("/login");
   };
 
@@ -50,16 +50,21 @@ export function TopBar() {
     : "";
 
   return (
-    <header className="h-[64px] flex-shrink-0 flex items-center justify-between px-4 md:px-6 bg-[rgba(17,24,39,0.7)] backdrop-blur-[12px] border-b border-[#1E2D45] sticky top-0 z-10">
+    <header className="h-[64px] flex-shrink-0 flex items-center justify-between px-4 md:px-6 glass-panel border-x-0 border-t-0 rounded-none sticky top-0 z-10">
 
-      {/* Mobile Menu */}
+      {/* Mobile Menu — SheetTrigger with render prop to avoid nested button */}
       <div className="md:hidden mr-2">
         <Sheet>
-          {/* @ts-expect-error */}
-          <SheetTrigger asChild>
-            <button className="p-2 text-muted-foreground hover:text-foreground">
-              <Menu className="w-5 h-5" />
-            </button>
+          <SheetTrigger
+            render={
+              <button
+                type="button"
+                className="p-2 text-muted-foreground hover:text-foreground"
+                aria-label="Open menu"
+              />
+            }
+          >
+            <Menu className="w-5 h-5" />
           </SheetTrigger>
           <SheetContent side="left" className="p-0 w-[260px] bg-surface border-border">
             <div className="h-full w-full overflow-hidden">
@@ -82,13 +87,19 @@ export function TopBar() {
 
       {/* Right Actions */}
       <div className="flex items-center gap-2 md:gap-4 ml-4">
+        {/* Notification bell — TooltipTrigger with render prop */}
         <Tooltip>
-          {/* @ts-expect-error */}
-          <TooltipTrigger asChild>
-            <button className="p-2 rounded-full hover:bg-elevated text-muted-foreground hover:text-foreground transition-all relative">
-              <Bell className="w-5 h-5" />
-              <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-primary ring-2 ring-[#111827]" />
-            </button>
+          <TooltipTrigger
+            render={
+              <button
+                type="button"
+                className="p-2 rounded-full hover:bg-elevated text-muted-foreground hover:text-foreground transition-all relative"
+                aria-label="Notifications"
+              />
+            }
+          >
+            <Bell className="w-5 h-5" />
+            <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-primary ring-2 ring-[#111827]" />
           </TooltipTrigger>
           <TooltipContent side="bottom" align="end" className="text-xs">
             Notifications
@@ -97,29 +108,33 @@ export function TopBar() {
 
         <div className="h-6 w-px bg-border mx-1 md:mx-2" />
 
+        {/* User avatar / logout — TooltipTrigger with render prop */}
         <Tooltip>
-          {/* @ts-expect-error */}
-          <TooltipTrigger asChild>
-            <button
-              className="flex items-center gap-3 hover:opacity-80 transition-opacity"
-              onClick={handleLogout}
-              title="Click to sign out"
-            >
-              <div className="text-right hidden md:block">
-                <p className="text-sm font-medium leading-none font-sans">{displayName}</p>
-                {displayRole && (
-                  <p className="text-xs text-muted-foreground mt-1 font-sans capitalize">
-                    {displayRole}
-                  </p>
-                )}
-              </div>
-              <Avatar className="w-9 h-9 border border-border">
-                <AvatarImage src="" />
-                <AvatarFallback className="bg-primary/20 text-primary font-medium text-xs font-sans">
-                  {user ? getInitials(user.name) : "??"}
-                </AvatarFallback>
-              </Avatar>
-            </button>
+          <TooltipTrigger
+            render={
+              <button
+                type="button"
+                className="flex items-center gap-3 hover:opacity-80 transition-opacity"
+                onClick={handleLogout}
+                title="Click to sign out"
+                aria-label="Sign out"
+              />
+            }
+          >
+            <div className="text-right hidden md:block">
+              <p className="text-sm font-medium leading-none font-sans">{displayName}</p>
+              {displayRole && (
+                <p className="text-xs text-muted-foreground mt-1 font-sans capitalize">
+                  {displayRole}
+                </p>
+              )}
+            </div>
+            <Avatar className="w-9 h-9 border border-border">
+              <AvatarImage src="" />
+              <AvatarFallback className="bg-primary/20 text-primary font-medium text-xs font-sans">
+                {user ? getInitials(user.name) : "??"}
+              </AvatarFallback>
+            </Avatar>
           </TooltipTrigger>
           <TooltipContent side="bottom" align="end" className="text-xs">
             Sign out

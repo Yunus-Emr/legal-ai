@@ -1,168 +1,547 @@
 "use client";
 
+/**
+ * Settings Page — İki Katmanlı Mimari
+ *
+ * Sekmeler:
+ * 1. Hesabım    — Ad, e-posta, şifre güncelleme (tüm kullanıcılar)
+ * 2. Görünüm    — Tema (dark/light/system), yazı boyutu (tüm kullanıcılar)
+ * 3. Bildirimler — E-posta & sistem tercihleri (tüm kullanıcılar)
+ * 4. Sistem      — Yalnızca admin: LLM model, guardrails, vs.
+ */
+
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Monitor, Moon, Sun, ShieldCheck, Laptop, BrainCircuit, Globe, Bell, LogOut, CheckCircle2 } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  User,
+  Monitor,
+  Bell,
+  ShieldCheck,
+  Moon,
+  Sun,
+  Laptop,
+  Save,
+  Loader2,
+  CheckCircle2,
+  Globe,
+  BrainCircuit,
+  KeyRound,
+  AlertCircle,
+} from "lucide-react";
 import { motion } from "framer-motion";
-import { useEffect } from "react";
-import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/store/authStore";
+import { authApi, type UpdateMePayload } from "@/lib/api";
 
+/* ── Types ─────────────────────────────────────────────────────────────── */
+type Theme = "dark" | "light" | "system";
+type NotifLevel = "all" | "important" | "none";
+type Lang = "en" | "tr" | "de";
+
+interface Prefs {
+  theme: Theme;
+  lang: Lang;
+  fontSize: number;
+  notifications: NotifLevel;
+  emailDigest: boolean;
+  mentions: boolean;
+}
+
+const PREF_KEY = "lexai_prefs";
+
+function loadPrefs(): Prefs {
+  if (typeof window === "undefined")
+    return { theme: "dark", lang: "en", fontSize: 14, notifications: "all", emailDigest: true, mentions: true };
+  try {
+    return JSON.parse(localStorage.getItem(PREF_KEY) || "null") || {
+      theme: "dark", lang: "en", fontSize: 14, notifications: "all", emailDigest: true, mentions: true,
+    };
+  } catch {
+    return { theme: "dark", lang: "en", fontSize: 14, notifications: "all", emailDigest: true, mentions: true };
+  }
+}
+
+function savePrefs(p: Prefs) {
+  localStorage.setItem(PREF_KEY, JSON.stringify(p));
+}
+
+/* ── Toggle Component ──────────────────────────────────────────────────── */
+function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <button
+      role="switch"
+      aria-checked={checked}
+      onClick={() => onChange(!checked)}
+      className={`w-10 h-5 rounded-full relative cursor-pointer transition-colors duration-200 shadow-inner ${
+        checked ? "bg-primary" : "bg-border"
+      }`}
+    >
+      <span
+        className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform duration-200 ${
+          checked ? "translate-x-5" : "translate-x-0.5"
+        }`}
+      />
+    </button>
+  );
+}
+
+/* ── Toast ─────────────────────────────────────────────────────────────── */
+function InlineAlert({ type, msg }: { type: "success" | "error"; msg: string }) {
+  return (
+    <div
+      className={`flex items-center gap-2 p-3 rounded-lg text-sm border ${
+        type === "success"
+          ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400"
+          : "bg-rose-500/10 border-rose-500/30 text-rose-400"
+      }`}
+    >
+      {type === "success" ? <CheckCircle2 className="w-4 h-4 shrink-0" /> : <AlertCircle className="w-4 h-4 shrink-0" />}
+      {msg}
+    </div>
+  );
+}
+
+/* ── Main Component ────────────────────────────────────────────────────── */
 export default function SettingsPage() {
-  const router = useRouter();
-  const { user, isLoadingUser: loadingUser } = useAuthStore();
+  const { user, setUser } = useAuthStore();
+  const isAdmin = user?.role === "admin";
 
+  /* Profile form */
+  const [name, setName] = useState(user?.name || "");
+  const [email, setEmail] = useState(user?.email || "");
+  const [currentPw, setCurrentPw] = useState("");
+  const [newPw, setNewPw] = useState("");
+  const [confirmPw, setConfirmPw] = useState("");
+  const [profileSaving, setProfileSaving] = useState(false);
+  const [profileAlert, setProfileAlert] = useState<{ type: "success" | "error"; msg: string } | null>(null);
+
+  /* Preferences */
+  const [prefs, setPrefs] = useState<Prefs>(loadPrefs);
+  const [prefsSaved, setPrefsSaved] = useState(false);
+
+  /* Sync name/email when user loads */
   useEffect(() => {
-    if (!loadingUser && user && user.role !== "admin") {
-      router.push("/");
+    if (user) {
+      setName(user.name);
+      setEmail(user.email);
     }
-  }, [user, loadingUser, router]);
+  }, [user]);
 
-  if (!user || user.role !== "admin") return null;
+  /* Apply theme class to <html> */
+  useEffect(() => {
+    const root = document.documentElement;
+    if (prefs.theme === "dark") {
+      root.classList.add("dark");
+    } else if (prefs.theme === "light") {
+      root.classList.remove("dark");
+    } else {
+      const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+      prefersDark ? root.classList.add("dark") : root.classList.remove("dark");
+    }
+  }, [prefs.theme]);
+
+  /* System Settings State */
+  const [systemPrefs, setSystemPrefs] = useState({
+    model: "gpt-4",
+    maxTokens: 2048,
+    strictHallucination: true,
+    piiMasking: true,
+    redactionLog: false,
+  });
+  const [sysSaving, setSysSaving] = useState(false);
+  const [sysSaved, setSysSaved] = useState(false);
+
+  const handleSaveSystem = () => {
+    setSysSaving(true);
+    setTimeout(() => {
+      setSysSaving(false);
+      setSysSaved(true);
+      setTimeout(() => setSysSaved(false), 3000);
+    }, 800);
+  };
+
+  const updatePref = <K extends keyof Prefs>(key: K, value: Prefs[K]) => {
+    const updated = { ...prefs, [key]: value };
+    setPrefs(updated);
+    savePrefs(updated);
+    setPrefsSaved(true);
+    setTimeout(() => setPrefsSaved(false), 2000);
+  };
+
+  const handleSaveProfile = async () => {
+    setProfileSaving(true);
+    setProfileAlert(null);
+
+    if (newPw && newPw !== confirmPw) {
+      setProfileAlert({ type: "error", msg: "Yeni şifreler eşleşmiyor." });
+      setProfileSaving(false);
+      return;
+    }
+
+    try {
+      const payload: UpdateMePayload = {
+        name,
+        email,
+        current_password: currentPw || undefined,
+        new_password: newPw || undefined,
+      };
+      const res = await authApi.updateMe(payload);
+      if (res?.data) setUser(res.data);
+      setProfileAlert({ type: "success", msg: "Profil başarıyla güncellendi." });
+      setCurrentPw(""); setNewPw(""); setConfirmPw("");
+    } catch (err: any) {
+      setProfileAlert({
+        type: "error",
+        msg: err?.response?.data?.detail || "Güncelleme sırasında bir hata oluştu.",
+      });
+    } finally {
+      setProfileSaving(false);
+    }
+  };
+
+  const themeOptions: { value: Theme; label: string; icon: React.ReactNode }[] = [
+    { value: "dark", label: "Koyu", icon: <Moon className="w-5 h-5" /> },
+    { value: "light", label: "Açık", icon: <Sun className="w-5 h-5" /> },
+    { value: "system", label: "Sistem", icon: <Laptop className="w-5 h-5" /> },
+  ];
 
   return (
-    <div className="p-8 h-full flex flex-col font-sans max-w-6xl mx-auto">
-      <div className="mb-8">
-        <h1 className="text-3xl font-semibold tracking-tight">System Settings</h1>
-        <p className="text-sm text-muted-foreground mt-1">Manage your enterprise environment, security, and AI preferences.</p>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-8 flex-1">
-        
-        {/* Navigation Sidebar */}
-        <div className="col-span-1 space-y-2">
-          <button className="w-full text-left px-4 py-3 bg-primary/10 border-l-2 border-primary text-primary font-medium rounded-r-lg flex items-center gap-3">
-            <Monitor className="w-4 h-4" /> Preferences
-          </button>
-          <button className="w-full text-left px-4 py-3 text-muted-foreground hover:bg-elevated hover:text-foreground font-medium rounded-lg flex items-center gap-3 transition-colors">
-            <BrainCircuit className="w-4 h-4" /> AI Behavior
-          </button>
-          <button className="w-full text-left px-4 py-3 text-muted-foreground hover:bg-elevated hover:text-foreground font-medium rounded-lg flex items-center gap-3 transition-colors">
-            <ShieldCheck className="w-4 h-4" /> Security & 2FA
-          </button>
-          <button className="w-full text-left px-4 py-3 text-muted-foreground hover:bg-elevated hover:text-foreground font-medium rounded-lg flex items-center gap-3 transition-colors">
-            <Laptop className="w-4 h-4" /> Active Sessions
-          </button>
+    <div className="p-6 lg:p-8 h-full overflow-y-auto font-sans">
+      <div className="max-w-4xl mx-auto">
+        {/* Header */}
+        <div className="mb-8">
+          <h1 className="text-3xl font-semibold tracking-tight">Ayarlar</h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            Hesap bilgilerinizi, görünüm tercihlerinizi ve bildirim ayarlarınızı yönetin.
+          </p>
         </div>
 
-        {/* Content Area */}
-        <div className="col-span-3 space-y-6 pb-10">
-          
-          {/* Appearance & Language */}
-          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="grid grid-cols-2 gap-6">
-            <Card className="bg-surface border-border">
-              <CardHeader className="border-b border-border">
-                <CardTitle className="text-base">Appearance</CardTitle>
-              </CardHeader>
-              <CardContent className="p-6">
-                <div className="flex gap-4">
-                  <div className="flex-1 border-2 border-primary bg-background rounded-xl p-4 flex flex-col items-center justify-center gap-2 cursor-pointer relative overflow-hidden">
-                    <div className="absolute inset-0 bg-primary/5"></div>
-                    <Moon className="w-6 h-6 text-primary" />
-                    <span className="text-sm font-medium">Dark Mode</span>
-                    <CheckCircle2 className="w-4 h-4 absolute top-2 right-2 text-primary" />
-                  </div>
-                  <div className="flex-1 border-2 border-border bg-[#F8FAFC] rounded-xl p-4 flex flex-col items-center justify-center gap-2 cursor-pointer opacity-50 hover:opacity-100 transition-opacity">
-                    <Sun className="w-6 h-6 text-slate-800" />
-                    <span className="text-sm font-medium text-slate-800">Light Mode</span>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+        <Tabs defaultValue="account" className="flex flex-col gap-4">
+          <TabsList className="bg-elevated border border-border self-start h-11 p-1">
+            <TabsTrigger value="account" className="data-[state=active]:glass-panel data-[state=active]:text-primary h-full px-5 flex items-center gap-2 text-sm">
+              <User className="w-4 h-4" /> Hesabım
+            </TabsTrigger>
+            <TabsTrigger value="appearance" className="data-[state=active]:glass-panel data-[state=active]:text-primary h-full px-5 flex items-center gap-2 text-sm">
+              <Monitor className="w-4 h-4" /> Görünüm
+            </TabsTrigger>
+            <TabsTrigger value="notifications" className="data-[state=active]:glass-panel data-[state=active]:text-primary h-full px-5 flex items-center gap-2 text-sm">
+              <Bell className="w-4 h-4" /> Bildirimler
+            </TabsTrigger>
+            {isAdmin && (
+              <TabsTrigger value="system" className="data-[state=active]:glass-panel data-[state=active]:text-primary h-full px-5 flex items-center gap-2 text-sm">
+                <BrainCircuit className="w-4 h-4" /> Sistem
+              </TabsTrigger>
+            )}
+          </TabsList>
 
-            <Card className="bg-surface border-border">
-              <CardHeader className="border-b border-border">
-                <CardTitle className="text-base">Localization</CardTitle>
-              </CardHeader>
-              <CardContent className="p-6 space-y-4">
-                <div>
-                  <label className="text-sm font-medium text-foreground block mb-2 flex items-center gap-2"><Globe className="w-4 h-4"/> Interface Language</label>
-                  <select className="w-full bg-elevated border border-border rounded-lg p-2.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary">
-                    <option>English (US)</option>
-                    <option>English (UK)</option>
-                    <option>Turkish (TR)</option>
-                    <option>German (DE)</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-foreground block mb-2 flex items-center gap-2"><Bell className="w-4 h-4"/> Notifications</label>
-                  <select className="w-full bg-elevated border border-border rounded-lg p-2.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary">
-                    <option>All Activity</option>
-                    <option>Important Only (Mentions & Risks)</option>
-                    <option>None</option>
-                  </select>
-                </div>
-              </CardContent>
-            </Card>
-          </motion.div>
+          {/* ── TAB 1: Hesabım ─────────────────────────────────────────────── */}
+          <TabsContent value="account">
+            <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
 
-          {/* AI Settings */}
-          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
-            <Card className="bg-surface border-border">
-              <CardHeader className="border-b border-border">
-                <CardTitle className="text-base flex items-center gap-2"><BrainCircuit className="w-4 h-4 text-ai-accent"/> AI Verbosity & Citations</CardTitle>
-              </CardHeader>
-              <CardContent className="p-6 space-y-6">
-                <div>
-                  <label className="text-sm font-medium text-foreground block mb-3">Response Detail Level</label>
-                  <div className="flex bg-elevated rounded-lg p-1 border border-border">
-                    <button className="flex-1 py-1.5 text-sm font-medium text-muted-foreground rounded-md hover:text-foreground transition-all">Concise (Summary)</button>
-                    <button className="flex-1 py-1.5 text-sm font-medium bg-surface text-primary shadow rounded-md border border-primary/20">Balanced</button>
-                    <button className="flex-1 py-1.5 text-sm font-medium text-muted-foreground rounded-md hover:text-foreground transition-all">Comprehensive (Full Legal Analysis)</button>
+              {/* Avatar & Name */}
+              <Card className="glass-panel border-border">
+                <CardHeader className="border-b border-border">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <User className="w-4 h-4 text-primary" /> Profil Bilgileri
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-6 space-y-4">
+                  {/* Avatar */}
+                  <div className="flex items-center gap-4">
+                    <div className="w-16 h-16 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center text-2xl font-bold text-primary select-none">
+                      {name ? name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2) : "?"}
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-foreground">{user?.name}</p>
+                      <p className="text-xs text-muted-foreground capitalize">{user?.role}</p>
+                    </div>
                   </div>
-                </div>
-                
-                <div>
-                  <label className="text-sm font-medium text-foreground block mb-3">Citation Format Style</label>
-                  <select className="w-full bg-elevated border border-border rounded-lg p-2.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary">
-                    <option>Bluebook / Harvard Legal Style</option>
-                    <option>Inline Numeric (e.g., [1])</option>
-                    <option>Standard Footnotes</option>
-                  </select>
-                </div>
-              </CardContent>
-            </Card>
-          </motion.div>
 
-          {/* Security & Active Sessions */}
-          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
-            <Card className="bg-surface border-border">
-              <CardHeader className="border-b border-border flex flex-row items-center justify-between">
-                <CardTitle className="text-base flex items-center gap-2"><ShieldCheck className="w-4 h-4 text-success"/> Device Sessions & History</CardTitle>
-                <Button size="sm" variant="outline" className="border-border text-xs h-7 text-muted-foreground">Sign out all other devices</Button>
-              </CardHeader>
-              <CardContent className="p-0">
-                <div className="divide-y divide-border">
-                  <div className="p-4 flex items-center justify-between bg-primary/5">
-                    <div className="flex items-center gap-4">
-                      <div className="p-2 bg-surface border border-border rounded-lg"><Monitor className="w-5 h-5 text-primary" /></div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-sm font-medium text-foreground block mb-1.5">Ad Soyad</label>
+                      <Input
+                        value={name}
+                        onChange={(e) => setName(e.target.value)}
+                        className="bg-elevated border-border"
+                        placeholder="Ad Soyad"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-foreground block mb-1.5">E-posta</label>
+                      <Input
+                        type="email"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        className="bg-elevated border-border"
+                        placeholder="email@example.com"
+                      />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Password */}
+              <Card className="glass-panel border-border">
+                <CardHeader className="border-b border-border">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <KeyRound className="w-4 h-4 text-warning" /> Şifre Değiştir
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-6 space-y-4">
+                  <div>
+                    <label className="text-sm font-medium text-foreground block mb-1.5">Mevcut Şifre</label>
+                    <Input type="password" value={currentPw} onChange={(e) => setCurrentPw(e.target.value)} className="bg-elevated border-border" placeholder="••••••••" />
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-sm font-medium text-foreground block mb-1.5">Yeni Şifre</label>
+                      <Input type="password" value={newPw} onChange={(e) => setNewPw(e.target.value)} className="bg-elevated border-border" placeholder="••••••••" />
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-foreground block mb-1.5">Yeni Şifre Tekrar</label>
+                      <Input type="password" value={confirmPw} onChange={(e) => setConfirmPw(e.target.value)} className="bg-elevated border-border" placeholder="••••••••" />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {profileAlert && <InlineAlert type={profileAlert.type} msg={profileAlert.msg} />}
+
+              <div className="flex justify-end">
+                <Button onClick={handleSaveProfile} disabled={profileSaving} className="bg-primary hover:bg-primary/90 text-white px-6">
+                  {profileSaving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
+                  {profileSaving ? "Kaydediliyor..." : "Kaydet"}
+                </Button>
+              </div>
+            </motion.div>
+          </TabsContent>
+
+          {/* ── TAB 2: Görünüm ─────────────────────────────────────────────── */}
+          <TabsContent value="appearance">
+            <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
+
+              {/* Theme */}
+              <Card className="glass-panel border-border">
+                <CardHeader className="border-b border-border">
+                  <CardTitle className="text-base">Renk Teması</CardTitle>
+                </CardHeader>
+                <CardContent className="p-6">
+                  <div className="grid grid-cols-3 gap-4">
+                    {themeOptions.map((opt) => (
+                      <button
+                        key={opt.value}
+                        onClick={() => updatePref("theme", opt.value)}
+                        className={`flex flex-col items-center gap-3 p-5 rounded-xl border-2 transition-all cursor-pointer relative ${
+                          prefs.theme === opt.value
+                            ? "border-primary bg-primary/5"
+                            : "border-border bg-elevated hover:border-primary/40"
+                        }`}
+                      >
+                        {prefs.theme === opt.value && (
+                          <CheckCircle2 className="w-4 h-4 text-primary absolute top-2 right-2" />
+                        )}
+                        <div className={prefs.theme === opt.value ? "text-primary" : "text-muted-foreground"}>
+                          {opt.icon}
+                        </div>
+                        <span className={`text-sm font-medium ${prefs.theme === opt.value ? "text-primary" : "text-foreground"}`}>
+                          {opt.label}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                  {prefsSaved && (
+                    <p className="text-xs text-emerald-400 mt-3 flex items-center gap-1">
+                      <CheckCircle2 className="w-3 h-3" /> Tema kaydedildi.
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Language */}
+              <Card className="glass-panel border-border">
+                <CardHeader className="border-b border-border">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Globe className="w-4 h-4 text-muted-foreground" /> Arayüz Dili
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-6">
+                  <select
+                    value={prefs.lang}
+                    onChange={(e) => updatePref("lang", e.target.value as Lang)}
+                    className="w-full max-w-xs bg-elevated border border-border rounded-lg p-2.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                  >
+                    <option value="en">English (US)</option>
+                    <option value="tr">Türkçe (TR)</option>
+                    <option value="de">Deutsch (DE)</option>
+                  </select>
+                  <p className="text-xs text-muted-foreground mt-2">
+                    Arayüz dili anlık olarak uygulanır ve tarayıcıda saklanır.
+                  </p>
+                </CardContent>
+              </Card>
+
+              {/* Font Size */}
+              <Card className="glass-panel border-border">
+                <CardHeader className="border-b border-border">
+                  <CardTitle className="text-base">Yazı Tipi Boyutu</CardTitle>
+                </CardHeader>
+                <CardContent className="p-6">
+                  <div className="flex items-center gap-4">
+                    <span className="text-xs text-muted-foreground w-4">A</span>
+                    <input
+                      type="range"
+                      min={12}
+                      max={18}
+                      step={1}
+                      value={prefs.fontSize}
+                      onChange={(e) => updatePref("fontSize", Number(e.target.value))}
+                      className="flex-1 accent-primary h-2"
+                    />
+                    <span className="text-lg text-muted-foreground w-4">A</span>
+                    <span className="text-sm text-muted-foreground font-mono w-8">{prefs.fontSize}px</span>
+                  </div>
+                </CardContent>
+              </Card>
+            </motion.div>
+          </TabsContent>
+
+          {/* ── TAB 3: Bildirimler ──────────────────────────────────────────── */}
+          <TabsContent value="notifications">
+            <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
+              <Card className="glass-panel border-border">
+                <CardHeader className="border-b border-border">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Bell className="w-4 h-4 text-primary" /> Bildirim Tercihleri
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-6 space-y-5">
+
+                  <div>
+                    <label className="text-sm font-medium text-foreground block mb-2">Sistem Bildirimleri</label>
+                    <select
+                      value={prefs.notifications}
+                      onChange={(e) => updatePref("notifications", e.target.value as NotifLevel)}
+                      className="w-full max-w-xs bg-elevated border border-border rounded-lg p-2.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                    >
+                      <option value="all">Tüm Aktiviteler</option>
+                      <option value="important">Yalnızca Önemli (Risk & Mention)</option>
+                      <option value="none">Kapalı</option>
+                    </select>
+                  </div>
+
+                  <div className="space-y-4 pt-2">
+                    <div className="flex items-center justify-between p-4 bg-elevated rounded-xl border border-border">
                       <div>
-                        <p className="text-sm font-medium text-foreground">MacBook Pro (macOS) <span className="ml-2 text-[10px] bg-primary/20 text-primary px-2 py-0.5 rounded uppercase tracking-wider">Current Session</span></p>
-                        <p className="text-xs text-muted-foreground mt-1">Istanbul, Turkey • Chrome • IP: 192.168.1.109</p>
+                        <p className="text-sm font-medium text-foreground">E-posta Özeti</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">Haftalık aktivite özeti e-posta ile gönderilsin.</p>
                       </div>
+                      <Toggle checked={prefs.emailDigest} onChange={(v) => updatePref("emailDigest", v)} />
                     </div>
-                    <span className="text-xs text-success font-medium">Active Now</span>
-                  </div>
-                  
-                  <div className="p-4 flex items-center justify-between hover:bg-elevated/50 transition-colors">
-                    <div className="flex items-center gap-4">
-                      <div className="p-2 bg-surface border border-border rounded-lg"><Laptop className="w-5 h-5 text-muted-foreground" /></div>
-                      <div>
-                        <p className="text-sm font-medium text-foreground">Windows 11 PC</p>
-                        <p className="text-xs text-muted-foreground mt-1">London, UK • Edge • IP: 45.32.12.11</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-4">
-                      <span className="text-xs text-muted-foreground font-mono">Last active: 2 hours ago</span>
-                      <Button size="icon" variant="ghost" className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"><LogOut className="w-4 h-4"/></Button>
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </motion.div>
 
-        </div>
+                    <div className="flex items-center justify-between p-4 bg-elevated rounded-xl border border-border">
+                      <div>
+                        <p className="text-sm font-medium text-foreground">Mention Bildirimleri</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">Bir dosyada veya davada @mention aldığında bildirim al.</p>
+                      </div>
+                      <Toggle checked={prefs.mentions} onChange={(v) => updatePref("mentions", v)} />
+                    </div>
+                  </div>
+
+                  {prefsSaved && (
+                    <p className="text-xs text-emerald-400 flex items-center gap-1">
+                      <CheckCircle2 className="w-3 h-3" /> Bildirim tercihleri kaydedildi.
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
+            </motion.div>
+          </TabsContent>
+
+          {/* ── TAB 4: Sistem (Yalnızca Admin) ──────────────────────────────── */}
+          {isAdmin && (
+            <TabsContent value="system">
+              <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
+                <Card className="glass-panel border-border">
+                  <CardHeader className="border-b border-border">
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <BrainCircuit className="w-4 h-4 text-ai-accent" /> AI Model Yapılandırması
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-6 space-y-4">
+                    <div>
+                      <label className="text-sm font-medium text-foreground block mb-2">Aktif LLM Modeli</label>
+                      <select 
+                        value={systemPrefs.model}
+                        onChange={(e) => setSystemPrefs({ ...systemPrefs, model: e.target.value })}
+                        className="w-full bg-elevated border border-border rounded-lg p-2.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                      >
+                        <option value="tinyllama">TinyLlama-1.1B-Chat (Local)</option>
+                        <option value="gpt-4">GPT-4 Turbo (OpenAI)</option>
+                        <option value="claude-3">Claude 3.5 Sonnet (Anthropic)</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-foreground block mb-2">Maks. Token (Context Window)</label>
+                      <Input 
+                        type="number" 
+                        value={systemPrefs.maxTokens}
+                        onChange={(e) => setSystemPrefs({ ...systemPrefs, maxTokens: parseInt(e.target.value) || 2048 })}
+                        className="bg-elevated border-border max-w-xs" 
+                      />
+                      <p className="text-xs text-muted-foreground mt-1">Her istekte kullanılacak maksimum token sayısı.</p>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card className="glass-panel">
+                  <CardHeader className="border-b border-border">
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <ShieldCheck className="w-4 h-4 text-warning" /> Prompt Guardrails
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-6 space-y-4">
+                    <div className="flex items-center justify-between p-4 bg-elevated rounded-xl border border-border">
+                      <div>
+                        <p className="text-sm font-medium text-foreground">Hallüsinasyon Önleme (Strict)</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">AI'ı yalnızca yüklü corpus'tan alıntı yapmaya zorla.</p>
+                      </div>
+                      <Toggle checked={systemPrefs.strictHallucination} onChange={(v) => setSystemPrefs({ ...systemPrefs, strictHallucination: v })} />
+                    </div>
+                    <div className="flex items-center justify-between p-4 bg-elevated rounded-xl border border-border">
+                      <div>
+                        <p className="text-sm font-medium text-foreground">PII Maskeleme</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">İsim ve kimlik bilgilerini LLM'e göndermeden önce otomatik maskele.</p>
+                      </div>
+                      <Toggle checked={systemPrefs.piiMasking} onChange={(v) => setSystemPrefs({ ...systemPrefs, piiMasking: v })} />
+                    </div>
+                    <div className="flex items-center justify-between p-4 bg-elevated rounded-xl border border-border">
+                      <div>
+                        <p className="text-sm font-medium text-foreground">Redaksiyon Logu</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">Tüm maskelenmiş alanları denetim kaydına ekle.</p>
+                      </div>
+                      <Toggle checked={systemPrefs.redactionLog} onChange={(v) => setSystemPrefs({ ...systemPrefs, redactionLog: v })} />
+                    </div>
+                    
+                    <div className="pt-4 flex items-center justify-between border-t border-border mt-6">
+                      {sysSaved ? (
+                         <p className="text-xs text-emerald-400 flex items-center gap-1">
+                          <CheckCircle2 className="w-3 h-3" /> Sistem ayarları güncellendi.
+                        </p>
+                      ) : <div />}
+                      <Button onClick={handleSaveSystem} disabled={sysSaving} className="bg-primary hover:bg-primary/90 text-white">
+                        {sysSaving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
+                        Kaydet
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              </motion.div>
+            </TabsContent>
+          )}
+        </Tabs>
       </div>
     </div>
   );

@@ -31,6 +31,13 @@ COOKIE_KWARGS = dict(
     secure=(settings.ENV == "production"),  # Production'da HTTPS zorunlu
 )
 
+# lexai_role: Next.js middleware tarafından okunabilmesi için httpOnly=False
+ROLE_COOKIE_KWARGS = dict(
+    httponly=False,
+    samesite="lax",
+    secure=(settings.ENV == "production"),
+)
+
 
 # ── Şemalar ─────────────────────────────────────────────────────────────────
 class UserCreate(BaseModel):
@@ -93,9 +100,11 @@ async def register(request: Request, response: Response, user_in: UserCreate, db
 
     access_token = create_access_token({"sub": user.id})
     refresh_token = create_refresh_token({"sub": user.id})
+    role = "admin" if any(getattr(r, 'role', r) == 'admin' for r in (user.roles if hasattr(user, 'roles') else [])) else "user"
 
     response.set_cookie("lexai_token", access_token, max_age=3600, **COOKIE_KWARGS)
     response.set_cookie("lexai_refresh", refresh_token, max_age=REFRESH_TOKEN_EXPIRE_DAYS * 86400, **COOKIE_KWARGS)
+    response.set_cookie("lexai_role", role, max_age=3600, **ROLE_COOKIE_KWARGS)
 
     return {"access_token": access_token, "token_type": "bearer", "user_id": user.id}
 
@@ -116,8 +125,14 @@ async def login(request: Request, response: Response, user_in: UserLogin, db: As
     access_token = create_access_token({"sub": user.id})
     refresh_token = create_refresh_token({"sub": user.id})
 
+    # Rolü DB'den çek
+    role_result = await db.execute(select(UserRole.role).where(UserRole.user_id == user.id))
+    roles = [r for (r,) in role_result.all()]
+    user_role = "admin" if "admin" in roles else "user"
+
     response.set_cookie("lexai_token", access_token, max_age=3600, **COOKIE_KWARGS)
     response.set_cookie("lexai_refresh", refresh_token, max_age=REFRESH_TOKEN_EXPIRE_DAYS * 86400, **COOKIE_KWARGS)
+    response.set_cookie("lexai_role", user_role, max_age=3600, **ROLE_COOKIE_KWARGS)
 
     return {"access_token": access_token, "token_type": "bearer", "user_id": user.id}
 
@@ -150,7 +165,14 @@ async def refresh_token(
         raise HTTPException(status_code=401, detail="Kullanıcı bulunamadı")
 
     new_access = create_access_token({"sub": user_id})
+
+    # Rol cookie'sini de yenile
+    role_result = await db.execute(select(UserRole.role).where(UserRole.user_id == user_id))
+    roles = [r for (r,) in role_result.all()]
+    user_role = "admin" if "admin" in roles else "user"
+
     response.set_cookie("lexai_token", new_access, max_age=3600, **COOKIE_KWARGS)
+    response.set_cookie("lexai_role", user_role, max_age=3600, **ROLE_COOKIE_KWARGS)
 
     return {"access_token": new_access, "token_type": "bearer", "user_id": user_id}
 
@@ -160,10 +182,11 @@ async def refresh_token(
 async def logout(response: Response):
     response.delete_cookie("lexai_token")
     response.delete_cookie("lexai_refresh")
+    response.delete_cookie("lexai_role")
     return {"message": "Çıkış yapıldı"}
 
 
-# ── Me ───────────────────────────────────────────────────────────────────────
+# ── Me (GET) ─────────────────────────────────────────────────────────────────
 @router.get("/me", response_model=UserOut)
 async def get_me(
     current_user: User = Depends(get_current_user_from_auth),
@@ -171,6 +194,56 @@ async def get_me(
 ):
     result = await db.execute(select(UserRole.role).where(UserRole.user_id == current_user.id))
     roles = [r for (r,) in result.all()]
+    return UserOut(
+        id=current_user.id,
+        name=current_user.name,
+        email=current_user.email,
+        role="admin" if "admin" in roles else "user",
+        is_active=current_user.is_active,
+    )
+
+
+# ── Me (PATCH) ───────────────────────────────────────────────────────────────
+class UpdateMeRequest(BaseModel):
+    name: Optional[str] = Field(None, min_length=2, max_length=100)
+    email: Optional[EmailStr] = None
+    current_password: Optional[str] = None
+    new_password: Optional[str] = Field(None, min_length=8)
+
+
+@router.patch("/me", response_model=UserOut)
+async def update_me(
+    body: UpdateMeRequest,
+    current_user: User = Depends(get_current_user_from_auth),
+    db: AsyncSession = Depends(get_db),
+):
+    """Kullanıcının kendi profil bilgilerini günceller."""
+    repo = UserRepository(db)
+
+    # Şifre değişikliği isteniyorsa mevcut şifreyi doğrula
+    if body.new_password:
+        if not body.current_password:
+            raise HTTPException(status_code=400, detail="Mevcut şifre gerekli")
+        if not verify_password(body.current_password, current_user.hashed_password):
+            raise HTTPException(status_code=400, detail="Mevcut şifre yanlış")
+        current_user.hashed_password = get_password_hash(body.new_password)
+
+    # İsim/Email güncelle
+    if body.name:
+        current_user.name = body.name
+    if body.email and body.email != current_user.email:
+        existing = await repo.get_by_email(body.email)
+        if existing:
+            raise HTTPException(status_code=400, detail="Bu e-posta adresi zaten kullanımda")
+        current_user.email = body.email
+
+    await db.commit()
+    await db.refresh(current_user)
+
+    result = await db.execute(select(UserRole.role).where(UserRole.user_id == current_user.id))
+    roles = [r for (r,) in result.all()]
+
+    logger.info(f"[Auth] Profil güncellendi: {current_user.email}")
     return UserOut(
         id=current_user.id,
         name=current_user.name,

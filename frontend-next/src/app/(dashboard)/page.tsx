@@ -12,7 +12,10 @@ import {
   Database,
   Zap,
   RefreshCw,
+  AlertCircle,
 } from "lucide-react";
+
+
 import { analyticsApi, type DashboardStats, type ActivityItem } from "@/lib/api";
 import { useAuthStore } from "@/store/authStore";
 
@@ -94,6 +97,7 @@ export default function Dashboard() {
   const [activity, setActivity] = useState<ActivityItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [backendOffline, setBackendOffline] = useState(false);
 
   const fetchData = async (silent = false) => {
     if (!silent) setIsLoading(true);
@@ -105,8 +109,16 @@ export default function Dashboard() {
       ]);
       setStats(statsRes.data);
       setActivity(activityRes.data);
-    } catch (err) {
-      console.error("Dashboard fetch error:", err);
+      setBackendOffline(false);
+    } catch (err: any) {
+      // Network Error = backend not running — show warning banner, not crash
+      const isNetworkErr = !err?.response;
+      if (isNetworkErr) {
+        setBackendOffline(true);
+        console.warn("[Dashboard] Backend unreachable — running in offline mode.");
+      } else {
+        console.error("Dashboard fetch error:", err);
+      }
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
@@ -129,11 +141,11 @@ export default function Dashboard() {
       alert: false,
     },
     {
-      label: "Pending Reviews",
-      value: "12",
-      icon: FileText,
-      trend: "Requires attention",
-      alert: true,
+      label: "Indexed Chunks",
+      value: stats ? stats.total_chunks.toLocaleString() : "—",
+      icon: Database,
+      trend: stats ? "Vector embeddings" : "Loading...",
+      alert: false,
     },
     {
       label: "AI Queries",
@@ -151,12 +163,23 @@ export default function Dashboard() {
     },
   ];
 
+
   return (
     <div className="p-6 lg:p-8 h-full overflow-y-auto">
+      {/* Backend offline banner */}
+      {backendOffline && (
+        <div className="mb-6 flex items-center gap-3 px-4 py-3 rounded-xl bg-warning/10 border border-warning/30 text-warning text-sm">
+          <AlertCircle className="w-4 h-4 shrink-0" />
+          <span>
+            <strong>Backend bağlantısı kurulamadı.</strong> Sistem çevrimdışı modda çalışıyor. API sunucusunun çalıştığından emin olun.
+          </span>
+        </div>
+      )}
       {/* Header */}
+
       <div className="flex justify-between items-end mb-8">
         <div>
-          <h1 className="text-3xl font-semibold tracking-tight text-foreground">
+          <h1 className="text-3xl font-semibold tracking-tight text-gradient">
             Dashboard
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
@@ -174,7 +197,7 @@ export default function Dashboard() {
           >
             <RefreshCw className={`w-4 h-4 ${isRefreshing ? "animate-spin" : ""}`} />
           </button>
-          <div className="flex items-center gap-2 text-xs font-medium text-primary bg-primary/10 px-3 py-1.5 rounded-full border border-primary/20">
+          <div className="flex items-center gap-2 text-xs font-medium text-primary bg-primary/10 px-3 py-1.5 rounded-full border border-primary/20 ai-glow">
             <ShieldCheck className="w-4 h-4" />
             System Health: Optimal
           </div>
@@ -192,8 +215,9 @@ export default function Dashboard() {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: idx * 0.08 }}
               >
-                <Card className="bg-surface border-border shadow-sm hover:border-primary/20 transition-colors">
-                  <CardContent className="p-6">
+                <Card className="glass-panel hover:border-primary/30 transition-colors card-lift relative overflow-hidden group">
+                  <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+                  <CardContent className="p-6 relative z-10">
                     <div className="flex justify-between items-start">
                       <div>
                         <p className="text-sm font-medium text-muted-foreground">
@@ -206,8 +230,8 @@ export default function Dashboard() {
                       <div
                         className={`p-2 rounded-lg ${
                           stat.alert
-                            ? "bg-destructive/10 text-destructive"
-                            : "bg-[#1A2235] text-muted-foreground"
+                            ? "bg-destructive/10 text-destructive shadow-[0_0_15px_rgba(239,68,68,0.2)]"
+                            : "bg-primary/10 text-primary shadow-[0_0_15px_rgba(79,70,229,0.2)]"
                         }`}
                       >
                         <stat.icon className="w-5 h-5" />
@@ -265,7 +289,7 @@ export default function Dashboard() {
                 bg: "bg-[#F59E0B]/10",
               },
             ].map((item) => (
-              <Card key={item.label} className="bg-surface border-border shadow-sm">
+              <Card key={item.label} className="glass-panel card-lift">
                 <CardContent className="p-4 flex items-center gap-3">
                   <div className={`p-2 rounded-lg ${item.bg}`}>
                     <item.icon className={`w-4 h-4 ${item.color}`} />
@@ -280,9 +304,9 @@ export default function Dashboard() {
           </div>
 
           {/* Urgent Matter Insights */}
-          <Card className="bg-surface border-border flex-1 shadow-sm">
-            <CardHeader className="border-b border-border pb-4">
-              <CardTitle className="text-lg font-medium flex items-center gap-2">
+          <Card className="glass-panel flex-1">
+            <CardHeader className="border-b border-border/50 pb-4">
+              <CardTitle className="text-lg font-medium flex items-center gap-2 text-gradient">
                 <FileText className="w-5 h-5 text-muted-foreground" />
                 Urgent Matter Insights
               </CardTitle>
@@ -324,9 +348,9 @@ export default function Dashboard() {
           animate={{ opacity: 1 }}
           transition={{ delay: 0.45 }}
         >
-          <Card className="bg-surface border-border flex-1 shadow-sm">
-            <CardHeader className="border-b border-border pb-4">
-              <CardTitle className="text-lg font-medium flex items-center gap-2">
+          <Card className="glass-panel flex-1">
+            <CardHeader className="border-b border-border/50 pb-4">
+              <CardTitle className="text-lg font-medium flex items-center gap-2 text-gradient">
                 <Activity className="w-5 h-5 text-muted-foreground" />
                 Intelligence Feed
               </CardTitle>

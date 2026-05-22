@@ -15,21 +15,7 @@ import {
   ChevronUp,
   Sparkles,
 } from "lucide-react";
-import api from "@/lib/api";
-
-interface SearchHit {
-  chunk_id: string;
-  document_name: string;
-  text: string;
-  score: number;
-  page?: number;
-}
-
-interface SearchResponse {
-  query: string;
-  results: SearchHit[];
-  total: number;
-}
+import { searchApi, type SearchHit } from "@/lib/api";
 
 const EXAMPLE_QUERIES = [
   "İş sözleşmesinin feshi ve kıdem tazminatı şartları",
@@ -63,10 +49,7 @@ export default function ResearchPage() {
     setExpandedId(null);
 
     try {
-      const res = await api.post<SearchResponse>("/api/v1/search", {
-        query: searchQuery,
-        top_k: 8,
-      });
+      const res = await searchApi.query(searchQuery, 8);
       setResults(res.data.results || []);
     } catch (err: unknown) {
       const msg =
@@ -84,13 +67,13 @@ export default function ResearchPage() {
   };
 
   return (
-    <div className="h-full flex flex-col bg-[#0A0E1A] overflow-hidden">
+    <div className="h-full flex flex-col bg-transparent overflow-hidden">
       {/* Hero search area */}
       <div className="flex-shrink-0 flex flex-col items-center px-8 pt-10 pb-6">
         <div className="w-14 h-14 bg-primary/10 border border-primary/20 rounded-2xl flex items-center justify-center mb-5 shadow-[0_0_30px_rgba(59,111,232,0.2)]">
           <Scale className="w-7 h-7 text-primary" />
         </div>
-        <h1 className="text-3xl font-semibold mb-1 tracking-tight text-foreground">
+        <h1 className="text-3xl font-semibold mb-1 tracking-tight text-gradient">
           Legal Research Engine
         </h1>
         <p className="text-muted-foreground mb-6 text-center max-w-xl text-sm">
@@ -100,7 +83,7 @@ export default function ResearchPage() {
         {/* Search bar */}
         <div className="w-full max-w-3xl relative group">
           <div className="absolute -inset-0.5 bg-gradient-to-r from-primary to-ai-accent rounded-xl blur opacity-20 group-focus-within:opacity-50 transition duration-500" />
-          <div className="relative flex items-center bg-[#111827] border border-border rounded-xl shadow-lg p-2">
+          <div className="relative flex items-center glass-panel rounded-xl shadow-lg p-2">
             <Search className="w-5 h-5 text-muted-foreground ml-3 shrink-0" />
             <Input
               ref={inputRef}
@@ -143,7 +126,7 @@ export default function ResearchPage() {
         {/* Quick links (before search) */}
         {!searched && (
           <div className="grid grid-cols-2 gap-3 mt-6 w-full max-w-3xl">
-            <div className="flex items-start gap-3 p-4 bg-[#111827] border border-border rounded-xl">
+            <div className="flex items-start gap-3 p-4 glass-panel rounded-xl card-lift cursor-default">
               <BookOpen className="w-5 h-5 text-ai-accent mt-0.5 shrink-0" />
               <div>
                 <h3 className="font-medium text-sm text-foreground">Kanun Veritabanı</h3>
@@ -152,7 +135,7 @@ export default function ResearchPage() {
                 </p>
               </div>
             </div>
-            <div className="flex items-start gap-3 p-4 bg-[#111827] border border-border rounded-xl">
+            <div className="flex items-start gap-3 p-4 glass-panel rounded-xl card-lift cursor-default">
               <AlertCircle className="w-5 h-5 text-warning mt-0.5 shrink-0" />
               <div>
                 <h3 className="font-medium text-sm text-foreground">Anlam Tabanlı Arama</h3>
@@ -181,7 +164,7 @@ export default function ResearchPage() {
             {[1, 2, 3].map((i) => (
               <div
                 key={i}
-                className="p-5 bg-[#111827] border border-border rounded-xl animate-pulse"
+                className="p-5 glass-panel rounded-xl animate-pulse"
               >
                 <div className="h-3 bg-border rounded w-1/3 mb-3" />
                 <div className="h-2 bg-border rounded w-full mb-2" />
@@ -206,7 +189,7 @@ export default function ResearchPage() {
                 return (
                   <div
                     key={hit.chunk_id}
-                    className="p-5 bg-[#111827] border border-border rounded-xl hover:border-primary/40 transition-all group"
+                    className="p-5 glass-panel rounded-xl hover:border-primary/40 transition-all group card-lift"
                   >
                     <div className="flex items-start justify-between gap-3 mb-2">
                       <div className="flex items-center gap-2 min-w-0">
