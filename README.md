@@ -1,4 +1,4 @@
-# ⚖️ Legal AI — Orion
+# ⚖️ Legal AI 
 > **Advanced Legal Intelligence Workspace** powered by Retrieval-Augmented Generation (RAG), Hybrid Semantic Search, and Local/Cloud LLM orchestration.
 
 ---
@@ -17,7 +17,7 @@
 
 ## 🚀 Projeye Genel Bakış
 
-**Orion (Legal AI)**, hukuk büroları ve avukatlar için özel olarak tasarlanmış, yapay zeka destekli akıllı bir yasal asistan platformudur. Belgelerinizi tarar, indeksler ve **Hibrit Arama (Dense Vector + Lexical Search)** teknolojisini kullanarak yasal belgeleriniz içinden en doğru bilgileri saniyeler içinde çıkararak RAG (Retrieval-Augmented Generation) akışı ile sorularınızı yanıtlar.
+**Legal AI**, hukuk büroları ve avukatlar için özel olarak tasarlanmış, yapay zeka destekli akıllı bir yasal asistan platformudur. Belgelerinizi tarar, indeksler ve **Hibrit Arama (Dense Vector + Lexical Search)** teknolojisini kullanarak yasal belgeleriniz içinden en doğru bilgileri saniyeler içinde çıkararak RAG (Retrieval-Augmented Generation) akışı ile sorularınızı yanıtlar.
 
 ---
 
