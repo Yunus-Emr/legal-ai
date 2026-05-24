@@ -3,7 +3,7 @@ RAG Service — ANA BEYİN (Gelişmiş)
 
 Sorgu → Embedding → Retrieval → Re-rank → Conversational Memory → LLM → Yanıt
 """
-from typing import Dict, List, Any, Optional
+from typing import AsyncIterator, Dict, List, Any, Optional
 from app.services.embedding_service import embedding_service
 from app.services.retrieval_service import retrieval_service
 from app.services.llm_service import llm_service
@@ -50,45 +50,68 @@ Genel hukuki konularda bilgi verebilirsin ama "yüklü kaynaklara" dayanmak zoru
 ## Yanıt:"""
 
 
+async def _build_rag_context(
+    query: str,
+    db=None,
+    cfg: Optional[Dict] = None,
+) -> tuple[list, str, str, dict]:
+    """
+    Ortak RAG adımları: retrieval → rerank → context + prompt oluşturma.
+    Hem ask() hem ask_stream() tarafından kullanılır (DRY).
+    Döner: (hits, prompt, history_text, llm_kwargs)
+    """
+    llm_model = None
+    llm_temp = None
+    llm_max_tokens = None
+    top_k_retrieve = settings.RAG_TOP_K + 3
+
+    if cfg is not None:
+        llm_model = cfg.get("llm_model")
+        llm_temp = cfg.get("temperature")
+        llm_max_tokens = cfg.get("max_tokens")
+        top_k_retrieve = cfg.get("top_k", settings.RAG_TOP_K) + 3
+
+    hits = await retrieval_service.search(query=query, top_k=top_k_retrieve, db=db)
+    logger.info(f"[RAG] {len(hits)} chunk bulundu, re-ranking...")
+
+    if hits:
+        hits = await _async_rerank(query, hits)
+        limit = cfg.get("top_k", settings.RAG_TOP_K) if cfg is not None else settings.RAG_TOP_K
+        hits = hits[:limit]
+
+    llm_kwargs = {
+        "model": llm_model,
+        "temperature": llm_temp,
+        "max_tokens": llm_max_tokens,
+    }
+
+    return hits, llm_kwargs
+
+
 class RAGService:
     async def ask(
         self,
         query: str,
         session_id: str,
         history: Optional[List[Dict[str, str]]] = None,
+        db=None,
     ) -> Dict[str, Any]:
-        # 1-2. Hybrid Search (Embeddings + BM25)
-        hits = await retrieval_service.search(query=query, top_k=8)
-        logger.info(f"[RAG] {len(hits)} chunk bulundu, re-ranking...")
+        cfg = None
+        if db is not None:
+            from app.services.config_service import config_service
+            cfg = await config_service.get_all(db)
 
-        # 3. Re-rank (CrossEncoder if available, keyword fallback otherwise)
-        if hits:
-            hits = await _async_rerank(query, hits)
-            # Yerel modeller için bağlamı daraltıyoruz (TinyLlama vb. 2048 token limitli)
-            k_limit = 3 if settings.LLM_PROVIDER == "huggingface" else 5
-            hits = hits[:k_limit]
-
-        # 4. Build history string
+        hits, llm_kwargs = await _build_rag_context(query, db=db, cfg=cfg)
         history_text = _format_history(history or [])
 
         if not hits:
-            # No documents — use general legal knowledge
             prompt = NO_DOCS_PROMPT.format(question=query, history=history_text)
-            answer = await llm_service.complete(prompt)
+            answer = await llm_service.complete(prompt, **llm_kwargs)
             return {"answer": answer, "sources": []}
 
-        # 5. Build context from hits
-        # Yerel model için max_tokens'ı düşür
-        context_limit = 1000 if settings.LLM_PROVIDER == "huggingface" else 2500
-        context = build_context(hits, max_tokens=context_limit)
-
-        # 6. Build CoT prompt and call LLM
-        prompt = LEGAL_COT_PROMPT.format(
-            context=context,
-            question=query,
-            history=history_text,
-        )
-        answer = await llm_service.complete(prompt)
+        context = build_context(hits, max_tokens=2500)
+        prompt = LEGAL_COT_PROMPT.format(context=context, question=query, history=history_text)
+        answer = await llm_service.complete(prompt, **llm_kwargs)
 
         sources = [
             {
@@ -99,8 +122,59 @@ class RAGService:
             }
             for h in hits
         ]
-
         return {"answer": answer, "sources": sources}
+
+    async def ask_stream(
+        self,
+        query: str,
+        session_id: str,
+        history: Optional[List[Dict[str, str]]] = None,
+        db=None,
+    ) -> AsyncIterator[Dict[str, Any]]:
+        """
+        Streaming RAG — token by token yanıt üretir.
+        Önce hits/sources event'i, sonra token stream, sonra done event'i yield eder.
+        """
+        cfg = None
+        if db is not None:
+            from app.services.config_service import config_service
+            cfg = await config_service.get_all(db)
+
+        hits, llm_kwargs = await _build_rag_context(query, db=db, cfg=cfg)
+        history_text = _format_history(history or [])
+
+        sources = [
+            {
+                "document_name": h.get("document_name", "Bilinmiyor"),
+                "chunk_id": h.get("chunk_id"),
+                "page": h.get("page"),
+                "score": round(h.get("score", 0), 4),
+            }
+            for h in hits
+        ]
+        yield {"type": "sources", "sources": sources}
+
+        if not hits:
+            prompt = NO_DOCS_PROMPT.format(question=query, history=history_text)
+        else:
+            context = build_context(hits, max_tokens=2500)
+            prompt = LEGAL_COT_PROMPT.format(context=context, question=query, history=history_text)
+
+        if llm_service._get_openai_client():
+            async for token in llm_service.stream_openai(prompt, **llm_kwargs):
+                yield {"type": "token", "token": token}
+        else:
+            # Fallback: dummy yanıt simüle et
+            import asyncio
+            dummy = llm_service._dummy_response(prompt)
+            words = dummy.split(" ")
+            for i, word in enumerate(words):
+                token = word + (" " if i < len(words) - 1 else "")
+                yield {"type": "token", "token": token}
+                if i % 5 == 0:
+                    await asyncio.sleep(0.01)
+
+        yield {"type": "done"}
 
 
 async def _async_rerank(query: str, hits: List[Dict]) -> List[Dict]:
@@ -109,15 +183,20 @@ async def _async_rerank(query: str, hits: List[Dict]) -> List[Dict]:
     return await asyncio.to_thread(reranker.rerank, query, hits)
 
 
-def _format_history(history: List[Dict[str, str]]) -> str:
+def _format_history(history: List[Dict[str, str]], window: Optional[int] = None) -> str:
+    """
+    Son `window` mesajı kullanarak sohbet geçmişini formatlar.
+    window parametresi verilmezse settings.RAG_HISTORY_WINDOW kullanılır.
+    İçerik artık kesilmiyor — tam metin gönderilir.
+    """
     if not history:
         return "Henüz sohbet geçmişi yok."
+    w = window or settings.RAG_HISTORY_WINDOW
     lines = []
-    for msg in history[-6:]:  # Last 6 messages (3 turns)
+    for msg in history[-w:]:
         role = "Kullanıcı" if msg["role"] == "user" else "Asistan"
-        lines.append(f"{role}: {msg['content'][:300]}")
+        lines.append(f"{role}: {msg['content']}")  # [:300] kaldırıldı
     return "\n".join(lines)
 
 
 rag_service = RAGService()
-

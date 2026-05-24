@@ -62,7 +62,7 @@ function AdminContent() {
 
   /* AI Config state */
   const [aiConfig, setAiConfig] = useState({
-    model: "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+    model: "gpt-4o",
     maxTokens: 2048,
     hallucination: true,
     piiMasking: true,
@@ -136,11 +136,18 @@ function AdminContent() {
 
   const handleSaveAiConfig = async () => {
     setSavingAi(true);
-    // Simulated save — replace with real adminApi call when endpoint exists
-    await new Promise((r) => setTimeout(r, 800));
-    setSavingAi(false);
-    setSavedAi(true);
-    setTimeout(() => setSavedAi(false), 3000);
+    try {
+      await adminApi.updateConfig({
+        llm_model: aiConfig.model,
+        max_tokens: aiConfig.maxTokens,
+      });
+      setSavedAi(true);
+      setTimeout(() => setSavedAi(false), 3000);
+    } catch (err: any) {
+      setError(err.response?.data?.detail || "Konfigürasyon güncellenemedi.");
+    } finally {
+      setSavingAi(false);
+    }
   };
 
   const formatDate = (dateStr: string) =>
@@ -354,11 +361,9 @@ function AdminContent() {
                       }
                       className="w-full bg-elevated border border-border rounded-lg p-2.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
                     >
-                      <option value="TinyLlama/TinyLlama-1.1B-Chat-v1.0">
-                        TinyLlama-1.1B-Chat (Local)
-                      </option>
-                      <option value="gpt-4">GPT-4 Legal Fine-tuned</option>
-                      <option value="claude-3">Claude 3.5 Sonnet</option>
+                      <option value="gpt-3.5-turbo">gpt-3.5-turbo (OpenAI)</option>
+                      <option value="gpt-4o">gpt-4o (OpenAI)</option>
+                      <option value="gpt-4">gpt-4 (OpenAI)</option>
                     </select>
                   </div>
                   <div>

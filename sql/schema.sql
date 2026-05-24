@@ -122,3 +122,20 @@ CREATE TABLE IF NOT EXISTS system_config (
     value JSONB NOT NULL,
     updated_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
+
+-- ── Matters (Cases) ─────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS matters (
+    id          VARCHAR(50)  PRIMARY KEY,
+    title       VARCHAR(255) NOT NULL,
+    client      VARCHAR(255) NOT NULL,
+    type        VARCHAR(100) NOT NULL,
+    status      VARCHAR(50)  NOT NULL DEFAULT 'Pending',
+    risk        VARCHAR(20)  NOT NULL DEFAULT 'Low',
+    attorney    VARCHAR(255),
+    due_date    VARCHAR(50),
+    user_id     VARCHAR(36)  REFERENCES users(id) ON DELETE CASCADE,
+    updated_at  TIMESTAMP    NOT NULL DEFAULT NOW(),
+    created_at  TIMESTAMP    NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_matters_user   ON matters(user_id);
+CREATE INDEX IF NOT EXISTS idx_matters_status ON matters(status);

@@ -9,7 +9,7 @@
  * - Yeni Matter modal (Create) — form state ile hazır
  */
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -31,6 +31,7 @@ import {
   ChevronRight,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import { mattersApi, Matter as ApiMatter } from "@/lib/api";
 
 /* ── Types ─────────────────────────────────────────────────────────────── */
 type RiskLevel = "High" | "Medium" | "Low";
@@ -48,16 +49,17 @@ interface Matter {
   dueDate: string;
 }
 
-/* ── Seed Data ─────────────────────────────────────────────────────────── */
-// TODO: replace with API call: const res = await api.get("/api/v1/matters");
-const SEED_CASES: Matter[] = [
-  { id: "MAT-2026-081", title: "TechCorp M&A Due Diligence", client: "TechCorp Inc.", type: "Corporate", status: "Active", risk: "High", updated: "2 saat önce", attorney: "Atty. Yılmaz", dueDate: "2026-06-15" },
-  { id: "MAT-2026-092", title: "Smith vs Global Logistics", client: "Global Logistics", type: "Litigation", status: "Discovery", risk: "Medium", updated: "1 gün önce", attorney: "Atty. Arslan", dueDate: "2026-07-01" },
-  { id: "MAT-2026-104", title: "Q3 Vendor Agreements", client: "Internal", type: "Compliance", status: "Review", risk: "Low", updated: "3 gün önce", attorney: "Atty. Çelik", dueDate: "2026-05-30" },
-  { id: "MAT-2026-115", title: "İşçi Hakları Davası", client: "Aksan Metal A.Ş.", type: "Labour", status: "Pending", risk: "High", updated: "5 gün önce", attorney: "Atty. Yılmaz", dueDate: "2026-06-20" },
-  { id: "MAT-2026-120", title: "Marka Tescil Başvurusu", client: "Nova Teknoloji", type: "IP", status: "Active", risk: "Low", updated: "1 hafta önce", attorney: "Atty. Çelik", dueDate: "2026-08-10" },
-  { id: "MAT-2026-133", title: "Kira Sözleşmesi Uyuşmazlığı", client: "Deniz Holding", type: "Property", status: "Active", risk: "Medium", updated: "2 hafta önce", attorney: "Atty. Arslan", dueDate: "2026-07-25" },
-];
+const mapBackendMatter = (b: any): Matter => ({
+  id: b.id,
+  title: b.title,
+  client: b.client,
+  type: b.type,
+  status: b.status as CaseStatus,
+  risk: b.risk as RiskLevel,
+  updated: b.created_at ? new Date(b.created_at).toLocaleDateString("tr-TR") : "Şimdi",
+  attorney: b.attorney || "Unassigned",
+  dueDate: b.due_date || "—",
+});
 
 const KANBAN_COLS: CaseStatus[] = ["Pending", "Discovery", "Review", "Active", "Closed"];
 
@@ -76,7 +78,10 @@ const STATUS_BADGE: Record<CaseStatus, string> = {
 };
 
 /* ── New Matter Modal ──────────────────────────────────────────────────── */
-interface NewMatterModalProps { onClose: () => void; onSave: (m: Matter) => void; }
+interface NewMatterModalProps {
+  onClose: () => void;
+  onSave: (m: Matter) => void;
+}
 
 function NewMatterModal({ onClose, onSave }: NewMatterModalProps) {
   const [title, setTitle] = useState("");
@@ -84,20 +89,28 @@ function NewMatterModal({ onClose, onSave }: NewMatterModalProps) {
   const [type, setType] = useState("Corporate");
   const [attorney, setAttorney] = useState("");
   const [dueDate, setDueDate] = useState("");
+  const [saving, setSaving] = useState(false);
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!title.trim() || !client.trim()) return;
-    const newMatter: Matter = {
-      id: `MAT-2026-${Math.floor(100 + Math.random() * 900)}`,
-      title, client, type,
-      status: "Pending",
-      risk: "Low",
-      updated: "Şimdi",
-      attorney: attorney || "Unassigned",
-      dueDate: dueDate || "—",
-    };
-    onSave(newMatter);
-    onClose();
+    setSaving(true);
+    try {
+      const res = await mattersApi.create({
+        title,
+        client,
+        type,
+        status: "Pending",
+        risk: "Low",
+        attorney: attorney || undefined,
+        due_date: dueDate || undefined,
+      });
+      onSave(mapBackendMatter(res.data));
+      onClose();
+    } catch (err) {
+      console.error("Dava açılırken hata oluştu:", err);
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -147,8 +160,8 @@ function NewMatterModal({ onClose, onSave }: NewMatterModalProps) {
 
         <div className="flex justify-end gap-3 mt-6">
           <Button variant="outline" onClick={onClose} className="border-border">İptal</Button>
-          <Button onClick={handleSave} disabled={!title.trim() || !client.trim()} className="bg-primary text-white">
-            Matter Oluştur
+          <Button onClick={handleSave} disabled={!title.trim() || !client.trim() || saving} className="bg-primary text-white">
+            {saving ? "Oluşturuluyor..." : "Matter Oluştur"}
           </Button>
         </div>
       </motion.div>
@@ -161,7 +174,25 @@ export default function CasesPage() {
   const [view, setView] = useState<"table" | "kanban" | "grid">("table");
   const [search, setSearch] = useState("");
   const [showModal, setShowModal] = useState(false);
-  const [cases, setCases] = useState<Matter[]>(SEED_CASES);
+  const [cases, setCases] = useState<Matter[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    const fetchMatters = async () => {
+      try {
+        setLoading(true);
+        const res = await mattersApi.list();
+        setCases(res.data.map(mapBackendMatter));
+      } catch (err: any) {
+        console.error("Dava listeleme hatası:", err);
+        setError("Davalar yüklenirken hata oluştu.");
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchMatters();
+  }, []);
 
   const filtered = useMemo(
     () => cases.filter((c) =>
@@ -218,7 +249,18 @@ export default function CasesPage() {
 
       {/* Content */}
       <div className="flex-1 overflow-auto min-h-0">
-        <AnimatePresence mode="wait">
+        {loading ? (
+          <div className="flex flex-col items-center justify-center h-64 text-muted-foreground">
+            <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-primary border-r-transparent mr-3 mb-2" />
+            <span>Davalar yükleniyor...</span>
+          </div>
+        ) : error ? (
+          <div className="flex flex-col items-center justify-center h-64 text-red-400 bg-red-950/20 border border-red-900/30 rounded-xl p-6">
+            <AlertTriangle className="w-8 h-8 mb-2" />
+            <p>{error}</p>
+          </div>
+        ) : (
+          <AnimatePresence mode="wait">
 
           {/* TABLE VIEW */}
           {view === "table" && (
@@ -358,6 +400,7 @@ export default function CasesPage() {
             </motion.div>
           )}
         </AnimatePresence>
+        )}
       </div>
 
       {/* Modal */}

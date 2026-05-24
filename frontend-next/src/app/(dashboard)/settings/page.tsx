@@ -144,7 +144,7 @@ export default function SettingsPage() {
 
   /* System Settings State */
   const [systemPrefs, setSystemPrefs] = useState({
-    model: "gpt-4",
+    model: "gpt-4o",
     maxTokens: 2048,
     strictHallucination: true,
     piiMasking: true,
@@ -478,9 +478,9 @@ export default function SettingsPage() {
                         onChange={(e) => setSystemPrefs({ ...systemPrefs, model: e.target.value })}
                         className="w-full bg-elevated border border-border rounded-lg p-2.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
                       >
-                        <option value="tinyllama">TinyLlama-1.1B-Chat (Local)</option>
-                        <option value="gpt-4">GPT-4 Turbo (OpenAI)</option>
-                        <option value="claude-3">Claude 3.5 Sonnet (Anthropic)</option>
+                        <option value="gpt-3.5-turbo">gpt-3.5-turbo (OpenAI)</option>
+                        <option value="gpt-4o">gpt-4o (OpenAI)</option>
+                        <option value="gpt-4">gpt-4 (OpenAI)</option>
                       </select>
                     </div>
                     <div>

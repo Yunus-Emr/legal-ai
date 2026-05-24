@@ -3,7 +3,7 @@ Chunking — PDF/text metnini örtüşen parçalara böler
 """
 import re
 import uuid
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 
 
 def chunk_text(
@@ -12,6 +12,7 @@ def chunk_text(
     filename: str,
     chunk_size: int = 512,
     overlap: int = 64,
+    page: Optional[int] = None,
 ) -> List[Dict[str, Any]]:
     """
     Metni chunk_size token'lık (kelime) parçalara böler,
@@ -24,18 +25,19 @@ def chunk_text(
     while i < len(words):
         end = min(i + chunk_size, len(words))
         chunk_words = words[i:end]
-        chunk_text = " ".join(chunk_words)
+        chunk_text_str = " ".join(chunk_words)
 
-        chunks.append(
-            {
-                "chunk_id": str(uuid.uuid4()),
-                "doc_id": doc_id,
-                "document_name": filename,
-                "text": chunk_text,
-                "word_count": len(chunk_words),
-                "start_word": i,
-            }
-        )
+        entry: Dict[str, Any] = {
+            "chunk_id": str(uuid.uuid4()),
+            "doc_id": doc_id,
+            "document_name": filename,
+            "text": chunk_text_str,
+            "word_count": len(chunk_words),
+            "start_word": i,
+        }
+        if page is not None:
+            entry["page"] = page
+        chunks.append(entry)
 
         if end == len(words):
             break
@@ -49,6 +51,7 @@ def chunk_by_paragraph(
     doc_id: str,
     filename: str,
     max_words: int = 400,
+    page: Optional[int] = None,
 ) -> List[Dict[str, Any]]:
     """
     Paragraf bazlı chunking — madde/paragraf sınırlarını korur.
@@ -61,32 +64,14 @@ def chunk_by_paragraph(
     chunks = []
     buffer: List[str] = []
     buf_words = 0
-    current_start_word = 0  # Belgede kaçıncı kelimeden başlıyor
+    current_start_word = 0
 
     for para in paragraphs:
         words = para.split()
         if not words:
             continue
         if buf_words + len(words) > max_words and buffer:
-            chunks.append(
-                {
-                    "chunk_id": str(uuid.uuid4()),
-                    "doc_id": doc_id,
-                    "document_name": filename,
-                    "text": "\n\n".join(buffer),
-                    "word_count": buf_words,
-                    "start_word": current_start_word,  # Gerçek konum
-                }
-            )
-            current_start_word += buf_words
-            buffer = []
-            buf_words = 0
-        buffer.append(para)
-        buf_words += len(words)
-
-    if buffer:
-        chunks.append(
-            {
+            entry: Dict[str, Any] = {
                 "chunk_id": str(uuid.uuid4()),
                 "doc_id": doc_id,
                 "document_name": filename,
@@ -94,7 +79,27 @@ def chunk_by_paragraph(
                 "word_count": buf_words,
                 "start_word": current_start_word,
             }
-        )
+            if page is not None:
+                entry["page"] = page
+            chunks.append(entry)
+            current_start_word += buf_words
+            buffer = []
+            buf_words = 0
+        buffer.append(para)
+        buf_words += len(words)
+
+    if buffer:
+        entry = {
+            "chunk_id": str(uuid.uuid4()),
+            "doc_id": doc_id,
+            "document_name": filename,
+            "text": "\n\n".join(buffer),
+            "word_count": buf_words,
+            "start_word": current_start_word,
+        }
+        if page is not None:
+            entry["page"] = page
+        chunks.append(entry)
 
     return chunks
 

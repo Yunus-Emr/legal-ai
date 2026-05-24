@@ -24,8 +24,8 @@ class OpenSearchClient:
                 self._client = AsyncOpenSearch(
                     hosts=[{"host": settings.OPENSEARCH_HOST, "port": settings.OPENSEARCH_PORT}],
                     http_auth=auth,
-                    use_ssl=False,
-                    verify_certs=False,
+                    use_ssl=settings.OPENSEARCH_USE_SSL,
+                    verify_certs=settings.OPENSEARCH_VERIFY_CERTS,
                 )
             except ImportError:
                 logger.warning("[OpenSearch] opensearch-py yüklü değil")

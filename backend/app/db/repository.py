@@ -7,7 +7,7 @@ Doğrudan db.add / db.execute çağrıları route katmanında olmamalıdır.
 from typing import List, Optional, Dict, Any
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete, func, update, distinct
-from app.db.models import Document, ChatHistory, QueryLog, User, Draft, AuditLog, UserRole
+from app.db.models import Document, ChatHistory, QueryLog, User, Draft, AuditLog, UserRole, Matter
 import uuid
 from datetime import datetime
 
@@ -205,6 +205,42 @@ class AuditLogRepository:
         return list(result.scalars().all())
 
 
+class MatterRepository:
+    def __init__(self, db: AsyncSession):
+        self.db = db
+
+    async def create(self, data: Dict[str, Any]) -> Matter:
+        matter = Matter(**data)
+        self.db.add(matter)
+        await self.db.flush()
+        return matter
+
+    async def list_all(self) -> List[Matter]:
+        result = await self.db.execute(select(Matter).order_by(Matter.created_at.desc()))
+        return list(result.scalars().all())
+
+    async def list_by_user(self, user_id: str) -> List[Matter]:
+        result = await self.db.execute(
+            select(Matter).where(Matter.user_id == user_id).order_by(Matter.created_at.desc())
+        )
+        return list(result.scalars().all())
+
+    async def get(self, id: str) -> Optional[Matter]:
+        result = await self.db.execute(select(Matter).where(Matter.id == id))
+        return result.scalar_one_or_none()
+
+    async def update(self, id: str, updates: Dict[str, Any]) -> Optional[Matter]:
+        await self.db.execute(
+            update(Matter).where(Matter.id == id).values(**updates)
+        )
+        await self.db.flush()
+        return await self.get(id)
+
+    async def delete(self, id: str) -> None:
+        await self.db.execute(delete(Matter).where(Matter.id == id))
+        await self.db.flush()
+
+
 # ── Dependency Injection Factory ──────────────────────────────────────────────
 # Route'larda şu şekilde kullanın:
 #
@@ -222,6 +258,7 @@ class Repositories:
         self.user      = UserRepository(db)
         self.draft     = DraftRepository(db)
         self.audit     = AuditLogRepository(db)
+        self.matter    = MatterRepository(db)
 
 
 async def get_repositories(db: AsyncSession) -> Repositories:  # type: ignore[return]

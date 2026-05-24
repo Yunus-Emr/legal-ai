@@ -124,3 +124,19 @@ class PasswordResetToken(Base):
     expires_at = Column(DateTime, nullable=False)
     used = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class Matter(Base):
+    __tablename__ = "matters"
+    id = Column(String, primary_key=True)
+    title = Column(String, nullable=False)
+    client = Column(String, nullable=False)
+    type = Column(String, nullable=False)
+    status = Column(String, default="Pending")  # Active, Discovery, Review, Pending, Closed
+    risk = Column(String, default="Low")  # High, Medium, Low
+    attorney = Column(String, nullable=True)
+    due_date = Column(String, nullable=True)
+    user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=True)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.utcnow)
+

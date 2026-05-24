@@ -89,9 +89,12 @@ class DocumentService:
 
     async def _process_document_task(self, doc_id: str, filename: str, content: bytes, content_type: str):
         try:
-            text = self._parse(content, content_type)
-            # Paragraf bazlı chunking — hukuki madde/fıkra sınırlarını korur
-            chunks = chunk_by_paragraph(text, doc_id=doc_id, filename=filename)
+            # PDF için sayfa sayfa işle (page numarası chunk'a eklenir)
+            if content_type not in ("text/plain", "text/html") and "wordprocessingml" not in (content_type or ""):
+                chunks = self._parse_pdf_with_pages(content, doc_id=doc_id, filename=filename)
+            else:
+                text = self._parse(content, content_type)
+                chunks = chunk_by_paragraph(text, doc_id=doc_id, filename=filename)
 
             from app.services.retrieval_service import retrieval_service
             indexed = await retrieval_service.index_chunks(chunks)
@@ -147,6 +150,36 @@ class DocumentService:
         except Exception as e:
             logger.warning(f"[DocService] pdfplumber hatası: {e}, raw decode deneniyor")
             return content.decode("utf-8", errors="replace")
+
+    def _parse_pdf_with_pages(
+        self,
+        content: bytes,
+        doc_id: str,
+        filename: str,
+    ) -> List[Dict[str, Any]]:
+        """
+        PDF'i sayfa sayfa parse eder ve her chunk'a page numarası ekler.
+        retrieval_service'teki h.get("page") bu bilgiyi kullanır.
+        """
+        all_chunks: List[Dict[str, Any]] = []
+        try:
+            with pdfplumber.open(io.BytesIO(content)) as pdf:
+                for page_num, page in enumerate(pdf.pages, start=1):
+                    text = page.extract_text()
+                    if not text or not text.strip():
+                        continue
+                    page_chunks = chunk_by_paragraph(
+                        text,
+                        doc_id=doc_id,
+                        filename=filename,
+                        page=page_num,
+                    )
+                    all_chunks.extend(page_chunks)
+        except Exception as e:
+            logger.warning(f"[DocService] _parse_pdf_with_pages hatası: {e}, sayfa bilgisiz fallback")
+            text = content.decode("utf-8", errors="replace")
+            all_chunks = chunk_by_paragraph(text, doc_id=doc_id, filename=filename)
+        return all_chunks
 
     async def delete_document(self, doc_id: str) -> None:
         async with SessionLocal() as db:

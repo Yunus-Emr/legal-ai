@@ -56,7 +56,11 @@ class EmbeddingService:
         prefix = "query: " if is_query else "passage: "
         processed_texts = [f"{prefix}{t.strip()}" for t in texts]
         if model:
-            vecs = model.encode(processed_texts, normalize_embeddings=True, batch_size=32)
+            vecs = model.encode(
+                processed_texts,
+                normalize_embeddings=True,
+                batch_size=settings.EMBEDDING_BATCH_SIZE,
+            )
             return vecs.tolist()
         return [self._embed_sync(t, is_query) for t in texts]
 

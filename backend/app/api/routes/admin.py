@@ -90,8 +90,8 @@ async def update_user(
 
 # ── System Config ───────────────────────────────────────────
 DEFAULT_CONFIG = {
-    "llm_model": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
-    "llm_provider": "huggingface",
+    "llm_model": "gpt-4o",
+    "llm_provider": "openai",
     "temperature": 0.1,
     "max_tokens": 1024,
     "chunk_size": 512,

@@ -7,7 +7,7 @@ from app.core.rate_limit import limiter  # Circular import önlendi — ayrı mo
 
 from app.core.config import settings
 from app.core.logger import get_logger
-from app.api.routes import chat, documents, search, health, auth, drafts, analytics, admin, ws
+from app.api.routes import chat, documents, search, health, auth, drafts, analytics, admin, ws, matters
 
 logger = get_logger(__name__)
 
@@ -21,6 +21,17 @@ async def lifespan(app: FastAPI):
     logger.info("🚀 Legal AI API başlatılıyor...")
     logger.info(f"   Environment: {settings.ENV}")
     logger.info(f"   Debug:       {settings.DEBUG}")
+
+    # Eksik veritabanı tablolarını (Matters vb.) otomatik oluştur
+    try:
+        from app.db.postgres import engine
+        from app.db.models import Base
+        logger.info("[Startup] Veritabanı tabloları kontrol ediliyor...")
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        logger.info("[Startup] Tüm veritabanı tabloları kontrol edildi / hazır.")
+    except Exception as exc:
+        logger.error(f"[Startup] Veritabanı tabloları otomatik oluşturulurken hata: {exc}", exc_info=True)
 
     # SECRET_KEY güvenlik kontrolü
     weak_keys = {"changeme", "change-this", "secret", "change-this-to-a-long-random-secret"}
@@ -42,6 +53,16 @@ async def lifespan(app: FastAPI):
         await retrieval_service.ensure_index()
     except Exception as exc:
         logger.warning(f"OpenSearch index ensure atlandı: {exc}")
+
+    # Reranker modelini önceden yükle (ilk istek cold start'ı önler)
+    try:
+        from app.rag.reranker import reranker
+        logger.info("[Startup] Reranker modeli yükleniyor...")
+        await asyncio.to_thread(reranker._load)
+        logger.info("[Startup] Reranker modeli hazır")
+    except Exception as exc:
+        logger.warning(f"[Startup] Reranker preload atlandı: {exc}")
+
     yield
     logger.info("🛑 Legal AI API kapatılıyor...")
 
@@ -80,6 +101,7 @@ app.include_router(documents.router, prefix="/api/v1", tags=["Documents"])
 app.include_router(search.router, prefix="/api/v1", tags=["Search"])
 app.include_router(auth.router, prefix="/api/v1/auth", tags=["Auth"])
 app.include_router(drafts.router, prefix="/api/v1/drafts", tags=["Drafts"])
+app.include_router(matters.router, prefix="/api/v1/matters", tags=["Matters"])
 app.include_router(analytics.router, prefix="/api/v1/analytics", tags=["Analytics"])
 app.include_router(admin.router, prefix="/api/v1/admin", tags=["Admin"])
 app.include_router(ws.router, tags=["WebSocket"])

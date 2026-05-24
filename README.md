@@ -1,5 +1,6 @@
-# ⚖️ Legal AI 
-> **Advanced Legal Intelligence Workspace** powered by Retrieval-Augmented Generation (RAG), Hybrid Semantic Search, and Local/Cloud LLM orchestration.
+# ⚖️ Legal AI
+
+> **Advanced Legal Intelligence Workspace** powered by Retrieval‑Augmented Generation (RAG), Hybrid Semantic Search, and Local/Cloud LLM orchestration.
 
 ---
 
@@ -15,41 +16,38 @@
 
 ---
 
-## 🚀 Projeye Genel Bakış
+## 📖 Proje Hakkında
 
-**Legal AI**, hukuk büroları ve avukatlar için özel olarak tasarlanmış, yapay zeka destekli akıllı bir yasal asistan platformudur. Belgelerinizi tarar, indeksler ve **Hibrit Arama (Dense Vector + Lexical Search)** teknolojisini kullanarak yasal belgeleriniz içinden en doğru bilgileri saniyeler içinde çıkararak RAG (Retrieval-Augmented Generation) akışı ile sorularınızı yanıtlar.
+**Legal AI**, hukuk büroları ve avukatlar için özel olarak tasarlanmış, yapay zeka destekli bir yasal asistan platformudur. Belgelerinizi otomatik olarak tarar, indeksler ve **Hibrit Arama (Dense Vector + Lexical Search)** sayesinde en doğru bilgileri saniyeler içinde çıkararak RAG (Retrieval‑Augmented Generation) akışı ile sorularınızı yanıtlar.
 
 ---
 
 ## ✨ Öne Çıkan Özellikler
 
-* 🔍 **Hibrit Semantic Search (RAG):** `intfloat/multilingual-e5-large` (1024 boyutlu) vektör gömme modeli ve **OpenSearch** entegrasyonu sayesinde belgeleriniz arasında gelişmiş semantik arama.
-* 🧠 **Çift Katmanlı LLM Orkestrasyonu:** İster bulut servisleri (**OpenAI GPT-4o/3.5**), ister yerel kaynakları (**Ollama / HuggingFace Transformers - TinyLlama**) kullanarak %100 gizlilik odaklı lokal çıkarım.
-* 🛡️ **Gelişmiş Rol Tabanlı Yetkilendirme (RBAC):** Next.js 16 standartlarında güçlendirilmiş Admin ve User yetki yönetimi (`RoleGuard HOC` & API güvenliği).
-* ⚡ **NVIDIA CUDA Hızlandırması:** GPU desteği ile lokal yapay zeka modellerini milisaniyeler seviyesinde çalıştırabilme seçeneği.
-* 📈 **Gerçek Zamanlı Analitik Paneli:** Kullanıcı sorgularını, token tüketimlerini, RAG doğruluk oranlarını izleme ve raporlama paneli.
+| Özellik                            | Açıklama                                                                 |
+| ---------------------------------- | ------------------------------------------------------------------------ |
+| 🔍 **Hibrit Semantic Search (RAG)** | `intfloat/multilingual-e5-large` vektör modeli + OpenSearch entegrasyonu |
+| 🤖 **LLM Orkestrasyonu**            | Bulut (OpenAI) ve yerel (Ollama) modeller arasında geçiş                 |
+| 🛡️ **Gelişmiş RBAC**                | Admin / User rolleri için RoleGuard HOC ve API korumaları                |
+| ⚡ **CUDA Hızlandırması**           | GPU destekli local modeller için milisaniye seviyesinde yanıt            |
+| 📈 **Gerçek Zamanlı Analitik**      | Sorgu istatistikleri, token tüketimi ve doğruluk oranları paneli         |
 
 ---
 
 ## 🏗️ Sistem Mimarisi & Veri Akışı
 
-Platform, mikroservis odaklı bir mimari üzerinde dockerize edilerek kurulmuştur. Aşağıdaki şema, kullanıcının sorgusunun sisteme girmesinden itibaren dönen RAG akışını temsil etmektedir:
-
 ```mermaid
 graph TD
-    User([⚖️ Avukat / Kullanıcı]) <-->|HTTPS / Arayüz| FE[💻 Next.js Frontend]
-    FE <-->|REST API / JSON| BE[⚙️ FastAPI Backend]
-    
-    subgraph Çekirdek Servisler
-        BE <-->|Metadata & Log Kayıtları| DB[(🐘 PostgreSQL 15)]
-        BE <-->|Hibrit Vektör Arama| OS[(🔍 OpenSearch DB)]
+    User([⚖️ Avukat / Kullanıcı]) -->|HTTPS / UI| FE[💻 Next.js Frontend]
+    FE -->|REST API / JSON| BE[⚙️ FastAPI Backend]
+    subgraph Core Services
+        BE -->|Metadata & Log| DB[(🐘 PostgreSQL 15)]
+        BE -->|Hybrid Vector Search| OS[(🔍 OpenSearch)]
     end
-
-    subgraph Yapay Zeka Katmanı
-        BE <-->|Emb. / Lokal LLM Çıkarımı| HF[🤗 HuggingFace / PyTorch]
-        BE <-->|Bulut LLM Çıkarımı| OAI[🤖 OpenAI API / Ollama]
+    subgraph AI Layer
+        BE -->|Embedding / Local LLM| HF[🤗 HuggingFace / PyTorch]
+        BE -->|Cloud LLM| OAI[🤖 OpenAI / Ollama]
     end
-    
     style User fill:#f9f,stroke:#333,stroke-width:2px
     style FE fill:#85C1E9,stroke:#333,stroke-width:2px
     style BE fill:#82E0AA,stroke:#333,stroke-width:2px
@@ -61,132 +59,133 @@ graph TD
 
 ---
 
-## 🛠️ Teknoloji Yığını (Tech Stack)
+## 🛠️ Teknoloji Yığını
 
-| Katman                   | Teknoloji                                   | Açıklama                                               |
-| :----------------------- | :------------------------------------------ | :----------------------------------------------------- |
-| **Arayüz (Frontend)**    | Next.js 15/16 (App Router), TS, TailwindCSS | Hızlı, SEO dostu ve responsive modern panel.           |
-| **Sunucu (Backend)**     | FastAPI (Python 3.10+), SQLAlchemy          | Asenkron, yüksek performanslı RESTful API.             |
-| **İlişkisel Veritabanı** | PostgreSQL 15                               | Kullanıcı rolleri, doküman meta verileri ve log kaydı. |
-| **Vektör Veritabanı**    | OpenSearch 2.12.0                           | Büyük ölçekli metin indeksleme ve vektör arama.        |
-| **Yapay Zeka / ML**      | PyTorch, Transformers, OpenAI               | `multilingual-e5-large` ve local `TinyLlama` motoru.   |
-| **Konteynerizasyon**     | Docker, Docker Compose                      | Bağımsız, taşınabilir ve hızlı dağıtım mimarisi.       |
+| Katman        | Teknoloji                                             | Açıklama                                         |
+| ------------- | ----------------------------------------------------- | ------------------------------------------------ |
+| **Frontend**  | Next.js 15/16 (App Router) • TypeScript • TailwindCSS | SEO‑dostu, responsive modern panel               |
+| **Backend**   | FastAPI (Python 3.10+) • SQLAlchemy                   | Asenkron, yüksek performanslı REST API           |
+| **RDBMS**     | PostgreSQL 15                                         | Kullanıcı rolleri, doküman meta ve log kayıtları |
+| **Vektör DB** | OpenSearch 2.12                                       | Büyük ölçekli metin indeksleme & vektör arama    |
+| **AI / ML**   | PyTorch • Transformers • OpenAI / Ollama              | `multilingual-e5-large` ve büyük dil modelleri   |
+| **Container** | Docker • Docker‑Compose                               | Taşınabilir, hızlı dağıtım                       |
 
 ---
 
-## 🚀 Hızlı Başlangıç (Getting Started)
-
-Proje hem yerel geliştirme ortamında (Local Dev) hem de konteynerler (Docker) üzerinde çalışacak şekilde optimize edilmiştir.
+## 🚀 Hızlı Başlangıç
 
 ### 📋 Ön Gereksinimler
-* Docker & Docker Compose kurulu olmalı.
-* *(GPU Modu İçin)* NVIDIA Ekran Kartı & [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html) kurulu olmalı.
 
----
+- **Docker** & **Docker‑Compose** (GPU desteği için NVIDIA Container Toolkit) 
+- **Python 3.10+** (lokal geliştirme) 
+- **Node.js 20+** (frontend) 
 
-### 🐳 Seçenek A: Docker ile Tek Tıkla Ayağa Kaldırma (Önerilen)
+### ⚙️ Docker ile Tek Tıkla Çalıştırma (Önerilen)
 
-Öncelikle yapılandırma şablonunu kopyalayın:
 ```bash
+# .env şablonunu kopyala
 cp .env.example .env
+
+# CPU Modu (GPU yok)
+sed -i 's/LLM_DEVICE=.*/LLM_DEVICE=cpu/' .env
+make docker-up   # ya da: docker compose up --build -d
+
+# GPU Modu (CUDA destekli)
+sed -i 's/LLM_DEVICE=.*/LLM_DEVICE=cuda/' .env
+make docker-up-gpu   # ya da: docker compose -f docker-compose.yml -f docker-compose.gpu.yml up --build -d
 ```
-Ardından sisteminize göre aşağıdaki başlatma modlarından birini seçin:
 
-#### 1. CPU (GPU'suz) Modu
-Eğer bilgisayarınızda NVIDIA ekran kartı yoksa:
-1. `.env` dosyası içinde `LLM_DEVICE=cpu` olarak güncelleyin.
-2. Aşağıdaki komutla başlatın:
-   ```bash
-   make docker-up
-   # Veya manuel: docker compose up --build -d
-   ```
-
-#### 2. GPU (NVIDIA CUDA) Modu
-Eğer CUDA destekli bir NVIDIA ekran kartınız varsa (lokal modeller çok daha hızlı çalışır):
-1. `.env` dosyası içinde `LLM_DEVICE=cuda` olarak güncelleyin.
-2. Aşağıdaki komutla başlatın:
-   ```bash
-   make docker-up-gpu
-   # Veya manuel: docker compose -f docker-compose.yml -f docker-compose.gpu.yml up --build -d
-   ```
-
-#### 🛑 Servisleri Durdurmak İçin:
+Durdurmak için:
 ```bash
-make docker-down
-# Veya manuel: docker compose down
+make docker-down   # ya da: docker compose down
 ```
 
----
+### 🖥️ Yerel Geliştirme (Local Dev)
 
-### 💻 Seçenek B: Yerel Geliştirme (Local Development)
+```bash
+# Bağımlılıkları kur
+make setup
 
-Projeyi kendi bilgisayarınızda servis servis kurarak çalıştırmak isterseniz:
+# OpenSearch ve PostgreSQL konteynerlerini başlat
+make start-opensearch   # (PostgreSQL zaten Compose içinde)
 
-1. **Bağımlılıkları Kurun:**
-   ```bash
-   make setup
-   ```
-2. **Altyapıyı Başlatın (PostgreSQL ve OpenSearch):**
-   ```bash
-   # Sadece OpenSearch'ü docker üzerinden başlatmak için:
-   make start-opensearch
-   ```
-3. **Backend Sunucusunu Başlatın:**
-   ```bash
-   make run-backend
-   ```
-4. **Frontend Sunucusunu Başlatın:**
-   ```bash
-   make run-frontend
-   ```
+# Backend'i çalıştır
+make run-backend   # http://localhost:8000
+
+# Frontend'i çalıştır
+make run-frontend   # http://localhost:3000
+```
 
 ---
 
 ## 📂 Proje Dizin Yapısı
 
-```directory
+```
 legal-ai/
-├── backend/                  # FastAPI Sunucusu & RAG Boru Hattı
-│   ├── app/
-│   │   ├── api/              # API Route Katmanları (Auth, Docs, Search)
-│   │   ├── core/             # Konfigürasyon, Güvenlik, Veritabanı Bağlantısı
-│   │   ├── models/           # SQLAlchemy DB Tablo Şemaları
-│   │   ├── services/         # LLM, Embedding, OpenSearch Arama Servisleri
-│   │   └── main.py           # Sunucu Giriş Noktası
-│   ├── Dockerfile
-│   └── requirements.txt
-├── frontend-next/            # Next.js Web Arayüzü
-│   ├── src/
-│   │   ├── app/              # Dashboard, Analitik, Ayarlar Sayfaları (Next App Router)
-│   │   ├── components/       # reusable UI Bileşenleri & Yetki Koruması (RoleGuard)
-│   │   └── proxy.ts          # API Proxy Geçidi
-│   ├── Dockerfile
-│   └── package.json
-├── sql/                      # Veritabanı Başlangıç Şemaları & Seed Verileri
-├── docker-compose.yml        # Temel Docker Compose Yapılandırması
-├── docker-compose.gpu.yml    # GPU (CUDA) Override Dosyası
-├── Makefile                  # Sık kullanılan terminal komutları kısayolları
-├── .env.example              # Ortam Değişkenleri Şablonu
-└── README.md                 # Proje Dokümantasyonu
+├─ backend/                # FastAPI sunucu & RAG pipeline
+│   ├─ app/
+│   │   ├─ api/          # API route katmanları (auth, docs, search)
+│   │   ├─ core/         # Konfigürasyon, güvenlik, DB bağlantısı
+│   │   ├─ models/       # SQLAlchemy şema tanımları
+│   │   ├─ services/     # LLM, embedding, OpenSearch servisleri
+│   │   └─ main.py       # Sunucu giriş noktası
+│   ├─ Dockerfile
+│   └─ requirements.txt
+├─ frontend-next/          # Next.js UI
+│   ├─ src/
+│   │   ├─ app/          # Dashboard, Analytics, Settings (App Router)
+│   │   ├─ components/   # Yeniden kullanılabilir UI & RoleGuard
+│   │   └─ proxy.ts      # API proxy
+│   ├─ Dockerfile
+│   └─ package.json
+├─ sql/                    # DB şema & seed verileri
+├─ docker-compose.yml
+├─ docker-compose.gpu.yml
+├─ Makefile                # Kısayol komutları
+├─ .env.example            # Ortam değişkenleri şablonu
+└─ README.md               # 📄 Bu dokümantasyon
 ```
 
 ---
 
-## 🔌 API Dokümantasyonu
+## 📚 API Dokümantasyonu
 
-Konteynerler ayağa kalktıktan sonra aşağıdaki servis portları üzerinden sistemi izleyebilirsiniz:
+Docker konteynerleri çalıştıktan sonra aşağıdaki adreslerden API’yi keşfedebilirsiniz:
 
-* **Sistem Arayüzü (Frontend Next.js):** [http://localhost:3000](http://localhost:3000)
-* **API Swagger Dokümantasyonu (FastAPI Docs):** [http://localhost:8000/docs](http://localhost:8000/docs)
-* **OpenSearch Arayüzü (Dashboards):** [http://localhost:5601](http://localhost:5601) *(monitoring profili aktifse)*
+- **Frontend**: <http://localhost:3000>
+- **FastAPI Swagger**: <http://localhost:8000/docs>
+- **OpenSearch Dashboard**: <http://localhost:5601> (monitoring aktifse)
+
+---
+
+## 🛡️ Güvenlik ve Üretim Önerileri
+
+- `.env` dosyasındaki `SECRET_KEY`, `POSTGRES_PASSWORD` ve `OPENSEARCH_ADMIN_PASSWORD` değerlerini **güçlü, benzersiz** şifrelerle değiştirin.
+- `.env` hiçbir zaman Git reposuna commit edilmemelidir. `.gitignore` içinde `.env` ekli olduğundan emin olun.
+- Production ortamına geçmeden önce **HTTPS** terminalleri, **rate limiting** ve **audit logging** yapılandırmalarını gözden geçirin.
 
 ---
 
-## 🛡️ Güvenlik ve Uyarılar
-* Üretim (Production) ortamına geçmeden önce `.env` dosyasındaki `SECRET_KEY`, `POSTGRES_PASSWORD` ve `OPENSEARCH_ADMIN_PASSWORD` değerlerini mutlaka **güçlü ve benzersiz** şifrelerle değiştirin.
-* `.env` dosyası hassas veriler içerdiğinden asla git havuzuna (repository) commit edilmemelidir.
+## 🤝 Katkıda Bulunma
+
+1. Fork yapın ve yeni bir branch oluşturun (`git checkout -b feature/awesome-feature`).
+2. Değişikliklerinizi test edin (`make test` – test altyapısı gelecekte eklenecek).
+3. Pull‑request gönderin ve kod incelemesi bekleyin.
 
 ---
+
+## 📄 Lisans
+
+Bu proje **MIT Lisansı** altında lisanslanmıştır. Detaylar için `LICENSE` dosyasına bakın.
+
+---
+
+## 🙏 Teşekkürler
+
+Bu projeyi hayata geçiren **Legal AI Developer Team**’e ❤️.
+
+---
+
 <p align="center">
   Made with ❤️ by the Legal AI Developer Team.
 </p>

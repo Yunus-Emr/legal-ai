@@ -33,16 +33,15 @@ class Settings(BaseSettings):
 
     # OpenAI / LLM
     OPENAI_API_KEY: str = ""
-    LLM_PROVIDER: str = "openai"  # huggingface | openai
-    LLM_MODEL: str = "gpt-3.5-turbo"
-    LLM_LOCAL_MODEL_PATH: str = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
-    LLM_DEVICE: str = "cpu"  # cuda | cpu | mps
+    LLM_PROVIDER: str = "openai"  # openai
+    LLM_MODEL: str = "gpt-4o"
     LLM_TEMPERATURE: float = 0.1
     LLM_MAX_TOKENS: int = 1024
 
     # Embeddings
     EMBEDDING_MODEL: str = "intfloat/multilingual-e5-large"
     EMBEDDING_DIM: int = 1024
+    EMBEDDING_BATCH_SIZE: int = 32  # CPU: 16-32, GPU: 64-128
 
     # OpenSearch
     OPENSEARCH_HOST: str = "localhost"
@@ -50,6 +49,8 @@ class Settings(BaseSettings):
     OPENSEARCH_INDEX: str = "legal_chunks"
     OPENSEARCH_USER: str = ""
     OPENSEARCH_PASS: str = ""
+    OPENSEARCH_USE_SSL: bool = False
+    OPENSEARCH_VERIFY_CERTS: bool = False
 
     # PostgreSQL
     POSTGRES_URL: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/legalai"
@@ -58,6 +59,7 @@ class Settings(BaseSettings):
     RAG_TOP_K: int = 5
     RAG_CHUNK_SIZE: int = 512
     RAG_CHUNK_OVERLAP: int = 64
+    RAG_HISTORY_WINDOW: int = 6  # Konusma gecmisi penceresi (mesaj sayisi)
 
     # SMTP (şifre sıfırlama emaili)
     SMTP_HOST: str = ""
