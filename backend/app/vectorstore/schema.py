@@ -44,10 +44,10 @@ LEGAL_INDEX_MAPPING = {
             # kNN vektör araması için — HNSW (Hierarchical NSW)
             "embedding": {
                 "type": "knn_vector",
-                "dimension": 1024,
+                "dimension": 1536,
                 "method": {
                     "name":       "hnsw",
-                    "space_type": "innerproduct",
+                    "space_type": "cosinesimil",
                     "engine":     "lucene",
                     "parameters": {"ef_construction": 256, "m": 16},
                 },

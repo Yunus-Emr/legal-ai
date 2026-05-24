@@ -20,7 +20,7 @@ services:
       interval: 30s
       timeout: 10s
       retries: 5
-      start_period: 120s  # embedding model yükleme süresi için bekleme
+      start_period: 30s   # OpenAI API — lokal model yükleme yok, hızlı başlar
     depends_on:
       postgres:
         condition: service_healthy
@@ -29,7 +29,6 @@ services:
     volumes:
       - ./data:/app/data
       - ./backend:/app
-      - hf_model_cache:/root/.cache/huggingface
     restart: unless-stopped
 
   # ── PostgreSQL ──────────────────────────────────────────────
@@ -99,18 +98,18 @@ services:
       - .env
     environment:
       - NEXT_PUBLIC_API_URL=http://localhost:8000
+      - BACKEND_URL=http://backend:8000
     volumes:
       - ./frontend-next:/app
       - frontend_node_modules:/app/node_modules # named volume — cache korunur
       - frontend_next_cache:/app/.next # named volume — build cache korunur
-    depends_on:
-      backend:
-        condition: service_healthy
+#    depends_on:
+#      backend:
+#        condition: service_healthy
     restart: unless-stopped
 
 volumes:
   postgres_data:
   opensearch_data:
-  hf_model_cache: # HuggingFace embedding model cache
   frontend_node_modules: # Next.js node_modules cache
   frontend_next_cache: # Next.js build output cache

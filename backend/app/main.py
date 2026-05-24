@@ -38,14 +38,13 @@ async def lifespan(app: FastAPI):
     if any(settings.SECRET_KEY.lower().startswith(w) for w in weak_keys):
         logger.warning("⚠️  SECRET_KEY varsayılan değer! .env dosyasını güncelleyin: python -c \"import secrets; print(secrets.token_hex(64))\"")
 
-    # Embedding modelini önceden yükle (ilk istek soğuğu önler)
+    # OpenAI bağlantı testi (embedding + reranker artık OpenAI API üzerinden)
     try:
         from app.services.embedding_service import embedding_service
-        logger.info("[Startup] Embedding modeli yükleniyor...")
-        await asyncio.to_thread(embedding_service._load_model)
-        logger.info("[Startup] Embedding modeli hazır")
+        test_vec = await embedding_service.embed_text("bağlantı testi")
+        logger.info(f"[Startup] OpenAI Embedding OK — dim={len(test_vec)}")
     except Exception as exc:
-        logger.warning(f"[Startup] Embedding model preload atlandı: {exc}")
+        logger.warning(f"[Startup] OpenAI Embedding testi başarısız: {exc}")
 
     # OpenSearch index
     try:
@@ -53,15 +52,6 @@ async def lifespan(app: FastAPI):
         await retrieval_service.ensure_index()
     except Exception as exc:
         logger.warning(f"OpenSearch index ensure atlandı: {exc}")
-
-    # Reranker modelini önceden yükle (ilk istek cold start'ı önler)
-    try:
-        from app.rag.reranker import reranker
-        logger.info("[Startup] Reranker modeli yükleniyor...")
-        await asyncio.to_thread(reranker._load)
-        logger.info("[Startup] Reranker modeli hazır")
-    except Exception as exc:
-        logger.warning(f"[Startup] Reranker preload atlandı: {exc}")
 
     yield
     logger.info("🛑 Legal AI API kapatılıyor...")

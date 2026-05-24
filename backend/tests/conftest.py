@@ -20,7 +20,7 @@ def anyio_backend():
     return "asyncio"
 
 
-@pytest_asyncio.fixture(scope="session")
+@pytest_asyncio.fixture(scope="function")
 async def test_engine():
     engine = create_async_engine(
         TEST_DATABASE_URL,
@@ -37,9 +37,13 @@ async def test_engine():
 
 @pytest_asyncio.fixture(scope="function")
 async def db_session(test_engine):
-    SessionLocal = async_sessionmaker(test_engine, expire_on_commit=False)
+    connection = await test_engine.connect()
+    transaction = await connection.begin()
+    SessionLocal = async_sessionmaker(connection, expire_on_commit=False)
     async with SessionLocal() as session:
         yield session
+    await transaction.rollback()
+    await connection.close()
 
 
 @pytest_asyncio.fixture(scope="function")

@@ -3,7 +3,6 @@ from pydantic import BaseModel
 from typing import List, Optional
 from app.core.security import get_api_key
 from app.services.retrieval_service import retrieval_service
-from app.rag.reranker import reranker
 from app.core.logger import get_logger
 import asyncio
 
@@ -15,7 +14,7 @@ class SearchRequest(BaseModel):
     query: str
     top_k: int = 5
     document_ids: Optional[List[str]] = None
-    rerank: bool = True  # Reranker opsiyonel — performans/kalite dengesi
+    rerank: bool = False  # Reranker kaldırıldı
 
 
 class SearchHit(BaseModel):
@@ -41,15 +40,14 @@ async def search(
     _: str = Depends(get_api_key),
 ):
     """
-    Semantik vektör araması — retrieval_service + opsiyonel reranking.
-    Chat endpoint'i ile aynı kalite seviyesi.
+    Semantik vektör araması — retrieval_service.
     """
     if not req.query.strip():
         raise HTTPException(status_code=400, detail="Sorgu boş olamaz")
     if req.top_k > 20:
         raise HTTPException(status_code=400, detail="top_k en fazla 20 olabilir")
 
-    logger.info(f"[Search] query={req.query[:60]} top_k={req.top_k} rerank={req.rerank}")
+    logger.info(f"[Search] query={req.query[:60]} top_k={req.top_k}")
 
     try:
         hits = await retrieval_service.search(
@@ -59,9 +57,6 @@ async def search(
         )
 
         reranked = False
-        if req.rerank and hits:
-            hits = await asyncio.to_thread(reranker.rerank, req.query, hits)
-            reranked = True
 
         results = [
             SearchHit(

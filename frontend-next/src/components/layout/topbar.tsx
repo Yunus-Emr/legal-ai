@@ -11,10 +11,11 @@ import { Sidebar } from "./sidebar";
 import { useAuthStore } from "@/store/authStore";
 import { authApi } from "@/lib/api";
 
-function getInitials(name: string): string {
+function getInitials(name: string | null | undefined): string {
+  if (!name) return "??";
   return name
     .split(" ")
-    .map((n) => n[0])
+    .map((n) => n[0] || "")
     .join("")
     .toUpperCase()
     .slice(0, 3);

@@ -38,10 +38,9 @@ class Settings(BaseSettings):
     LLM_TEMPERATURE: float = 0.1
     LLM_MAX_TOKENS: int = 1024
 
-    # Embeddings
-    EMBEDDING_MODEL: str = "intfloat/multilingual-e5-large"
-    EMBEDDING_DIM: int = 1024
-    EMBEDDING_BATCH_SIZE: int = 32  # CPU: 16-32, GPU: 64-128
+    # Embeddings (OpenAI)
+    EMBEDDING_MODEL: str = "text-embedding-3-small"
+    EMBEDDING_DIM: int = 1536
 
     # OpenSearch
     OPENSEARCH_HOST: str = "localhost"

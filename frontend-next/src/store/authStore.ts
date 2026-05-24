@@ -8,7 +8,7 @@
  */
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
-import { removeToken } from "@/lib/auth"; // setToken artık kullanılmıyor
+import { setToken, removeToken } from "@/lib/auth";
 import { authApi } from "@/lib/api";
 import type { UserOut } from "@/lib/api";
 
@@ -17,7 +17,6 @@ interface AuthState {
   isAuthenticated: boolean;
   isLoadingUser: boolean;
 
-  // token artık interface'de yok — httpOnly cookie'de saklı
   setAuth: (token: string | undefined, user: UserOut) => void;
   setUser: (user: UserOut) => void;
   setLoadingUser: (loading: boolean) => void;
@@ -31,9 +30,8 @@ export const useAuthStore = create<AuthState>()(
       isAuthenticated: false,
       isLoadingUser: false,
 
-      setAuth: (_token, user) => {
-        // Token artık httpOnly cookie'de — localStorage'a YAZILMIYOR
-        // _token parametresi geriye dönük uyumluluk için tutuldu
+      setAuth: (token, user) => {
+        if (token) setToken(token);
         set({ user, isAuthenticated: true });
       },
 

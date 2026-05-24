@@ -3,26 +3,51 @@
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Scale, Lock, Mail, KeyRound, ShieldCheck, ArrowRight, User } from "lucide-react";
+import { Scale, Lock, Mail, KeyRound, ShieldCheck, ArrowRight, User, AlertCircle } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { authApi } from "@/lib/api";
+import { useAuthStore } from "@/store/authStore";
 
 export default function RegisterPage() {
   const router = useRouter();
+  const { setAuth, setUser } = useAuthStore();
+  
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const handleRegister = (e: React.FormEvent) => {
+  const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError(null);
     setIsLoading(true);
-    // Simulate register API call
-    setTimeout(() => {
+    
+    try {
+      // 1) Register using backend API
+      const { data } = await authApi.register({ name: fullName, email, password });
+
+      // 2) Fetch user details
+      const meRes = await authApi.me();
+      const user = meRes.data;
+
+      // 3) Update authentication store
+      setUser(user);
+      setAuth(data.access_token, user);
+      
+      // 4) Clean guest flag
+      document.cookie = "lexai_guest=; path=/; max-age=0";
+
+      // 5) Redirect to dashboard
+      router.push("/");
+    } catch (err: any) {
+      const msg = err?.response?.data?.detail || "Kayıt başarısız. Bilgilerinizi kontrol edin.";
+      setError(msg);
+    } finally {
       setIsLoading(false);
-      router.push("/login");
-    }, 1000);
+    }
   };
 
   return (
@@ -79,6 +104,18 @@ export default function RegisterPage() {
             <p className="text-sm text-[#94A3B8]">Request access or set up your corporate profile.</p>
           </div>
 
+          {/* Error Alert */}
+          {error && (
+            <motion.div
+              initial={{ opacity: 0, y: -8 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="mb-5 flex items-start gap-3 px-4 py-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-sm"
+            >
+              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+              <span>{error}</span>
+            </motion.div>
+          )}
+
           <form onSubmit={handleRegister} className="space-y-5" aria-label="Registration Form">
             
             {/* Full Name Field */}
@@ -95,6 +132,7 @@ export default function RegisterPage() {
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
                   aria-required="true"
+                  disabled={isLoading}
                 />
               </div>
             </div>
@@ -113,6 +151,7 @@ export default function RegisterPage() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   aria-required="true"
+                  disabled={isLoading}
                 />
               </div>
               <p className="text-[11px] text-[#94A3B8] ml-1">Must use a corporate domain.</p>
@@ -133,6 +172,7 @@ export default function RegisterPage() {
                   onChange={(e) => setPassword(e.target.value)}
                   aria-required="true"
                   minLength={12}
+                  disabled={isLoading}
                 />
               </div>
               <p className="text-[11px] text-[#94A3B8] ml-1">Minimum 12 characters required.</p>

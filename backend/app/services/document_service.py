@@ -18,6 +18,7 @@ from fastapi import BackgroundTasks
 from app.core.logger import get_logger
 from app.rag.chunking import chunk_by_paragraph
 from app.db.models import Document, AuditLog
+from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.repository import DocumentRepository
 from app.db.postgres import SessionLocal
 
@@ -25,9 +26,23 @@ logger = get_logger(__name__)
 
 
 class DocumentService:
-    async def list_documents(self) -> List[Dict[str, Any]]:
-        async with SessionLocal() as db:
+    async def list_documents(self, db: Optional[AsyncSession] = None) -> List[Dict[str, Any]]:
+        if db is not None:
             repo = DocumentRepository(db)
+            docs = await repo.list_all()
+            return [
+                {
+                    "id": d.id,
+                    "filename": d.filename,
+                    "size_bytes": d.size_bytes,
+                    "chunk_count": d.chunk_count,
+                    "status": d.status,
+                    "created_at": d.created_at.isoformat(),
+                }
+                for d in docs
+            ]
+        async with SessionLocal() as db_session:
+            repo = DocumentRepository(db_session)
             docs = await repo.list_all()
             return [
                 {

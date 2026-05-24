@@ -8,7 +8,6 @@ from app.services.embedding_service import embedding_service
 from app.services.retrieval_service import retrieval_service
 from app.services.llm_service import llm_service
 from app.rag.pipeline import build_context
-from app.rag.reranker import reranker
 from app.core.config import settings
 from app.core.logger import get_logger
 
@@ -54,30 +53,25 @@ async def _build_rag_context(
     query: str,
     db=None,
     cfg: Optional[Dict] = None,
-) -> tuple[list, str, str, dict]:
+) -> tuple[list, dict]:
     """
-    Ortak RAG adımları: retrieval → rerank → context + prompt oluşturma.
+    Ortak RAG adımları: retrieval → context + prompt oluşturma.
     Hem ask() hem ask_stream() tarafından kullanılır (DRY).
-    Döner: (hits, prompt, history_text, llm_kwargs)
+    Döner: (hits, llm_kwargs)
     """
     llm_model = None
     llm_temp = None
     llm_max_tokens = None
-    top_k_retrieve = settings.RAG_TOP_K + 3
+    top_k = settings.RAG_TOP_K
 
     if cfg is not None:
         llm_model = cfg.get("llm_model")
         llm_temp = cfg.get("temperature")
         llm_max_tokens = cfg.get("max_tokens")
-        top_k_retrieve = cfg.get("top_k", settings.RAG_TOP_K) + 3
+        top_k = cfg.get("top_k", settings.RAG_TOP_K)
 
-    hits = await retrieval_service.search(query=query, top_k=top_k_retrieve, db=db)
-    logger.info(f"[RAG] {len(hits)} chunk bulundu, re-ranking...")
-
-    if hits:
-        hits = await _async_rerank(query, hits)
-        limit = cfg.get("top_k", settings.RAG_TOP_K) if cfg is not None else settings.RAG_TOP_K
-        hits = hits[:limit]
+    hits = await retrieval_service.search(query=query, top_k=top_k, db=db)
+    logger.info(f"[RAG] {len(hits)} chunk bulundu.")
 
     llm_kwargs = {
         "model": llm_model,
@@ -177,10 +171,7 @@ class RAGService:
         yield {"type": "done"}
 
 
-async def _async_rerank(query: str, hits: List[Dict]) -> List[Dict]:
-    """Run reranker in thread pool to avoid blocking."""
-    import asyncio
-    return await asyncio.to_thread(reranker.rerank, query, hits)
+
 
 
 def _format_history(history: List[Dict[str, str]], window: Optional[int] = None) -> str:

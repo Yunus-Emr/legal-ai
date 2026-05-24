@@ -55,24 +55,6 @@ class TestPipelineContext:
         assert ctx == ""
 
 
-class TestReranker:
-    """CrossEncoder reranker'ı test eder."""
-
-    def test_reranker_returns_sorted(self):
-        from app.rag.reranker import Reranker
-        reranker = Reranker.__new__(Reranker)
-        reranker._model = None
-
-        with patch.object(reranker, '_load', return_value=None):
-            with patch('app.rag.reranker.Reranker._load') as mock_load:
-                # Mock modeli olmadan sadece sıralama mantığını test et
-                hits = [
-                    {"text": "test1", "score": 0.5},
-                    {"text": "test2", "score": 0.9},
-                ]
-                # Reranker model olmadan çalışırsa orijinal sırası korunur
-                assert len(hits) == 2
-
 
 class TestPasswordHashing:
     """Şifre hash fonksiyonlarını test eder."""

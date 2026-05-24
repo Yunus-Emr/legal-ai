@@ -82,6 +82,20 @@ class ChatRepository:
         )
         return [{"role": h.role, "content": h.content, "created_at": h.created_at} for h in result.scalars().all()]
 
+    async def get_history(self, session_id: str, user_id: str) -> List[ChatHistory]:
+        result = await self.db.execute(
+            select(ChatHistory)
+            .where((ChatHistory.session_id == session_id) & (ChatHistory.user_id == user_id))
+            .order_by(ChatHistory.created_at.asc())
+        )
+        return list(result.scalars().all())
+
+    async def add_turn(
+        self, session_id: str, query: str, answer: str, user_id: str
+    ) -> None:
+        await self.add_message(session_id, "user", query, user_id)
+        await self.add_message(session_id, "assistant", answer, user_id)
+
 
 
 class QueryLogRepository:

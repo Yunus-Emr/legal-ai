@@ -97,7 +97,7 @@ DEFAULT_CONFIG = {
     "chunk_size": 512,
     "chunk_overlap": 64,
     "top_k": 5,
-    "embedding_model": "intfloat/e5-large",
+    "embedding_model": "text-embedding-3-small",
 }
 
 @router.get("/config")

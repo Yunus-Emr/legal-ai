@@ -3,6 +3,8 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, BackgroundTasks
 from fastapi.responses import JSONResponse, FileResponse
 from typing import List
+from sqlalchemy.ext.asyncio import AsyncSession
+from app.db.postgres import get_db
 from app.core.security import get_current_user
 from app.db.models import User
 from app.services.document_service import document_service
@@ -23,9 +25,9 @@ MAX_SIZE_MB = 50
 
 
 @router.get("/documents")
-async def list_documents(current_user: User = Depends(get_current_user)):
+async def list_documents(db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
     """Yüklenmiş dokümanları listeler."""
-    docs = await document_service.list_documents()
+    docs = await document_service.list_documents(db)
     return {"documents": docs}
 
 

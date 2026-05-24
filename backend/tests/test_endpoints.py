@@ -8,7 +8,7 @@ from unittest.mock import patch, AsyncMock
 class TestHealth:
     async def test_health_returns_status(self, client):
         """Health endpoint auth gerektirmez."""
-        with patch("app.api.routes.health.opensearch_client") as mock_os:
+        with patch("app.vectorstore.opensearch_client.opensearch_client") as mock_os:
             mock_os.ping = AsyncMock(return_value=True)
             res = await client.get("/api/v1/health")
         assert res.status_code == 200
@@ -18,8 +18,8 @@ class TestHealth:
         assert "uptime_seconds" in data
 
     async def test_health_degraded_when_db_down(self, client):
-        with patch("app.api.routes.health.SessionLocal") as mock_sl, \
-             patch("app.api.routes.health.opensearch_client") as mock_os:
+        with patch("app.db.postgres.SessionLocal") as mock_sl, \
+             patch("app.vectorstore.opensearch_client.opensearch_client") as mock_os:
             mock_os.ping = AsyncMock(return_value=False)
             mock_sl.return_value.__aenter__ = AsyncMock(side_effect=Exception("DB down"))
             res = await client.get("/api/v1/health")
