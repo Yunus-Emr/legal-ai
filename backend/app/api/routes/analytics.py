@@ -3,7 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, text
 from app.db.postgres import get_db
 from app.core.security import get_current_user
-from app.db.models import User, Document, ChatHistory, QueryLog, AuditLog
+from app.db.models import User, Document, ChatHistory, QueryLog, AuditLog, MatterInsight
 
 router = APIRouter()
 
@@ -129,4 +129,71 @@ async def get_usage_heatmap(
     """))
     rows = result.fetchall()
     return [{"day": r[0], "hour": r[1], "value": r[2]} for r in rows]
+
+
+@router.post("/reset")
+async def reset_analytics(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Sorgu loglarını temizleyerek analiz metriklerini ve ortalama yanıt süresini sıfırlar."""
+    await db.execute(text("DELETE FROM query_logs"))
+    await db.commit()
+    return {"status": "success", "message": "Analiz metrikleri sıfırlandı."}
+
+
+@router.get("/insights")
+async def get_insights(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Kritik Hukuki Analizleri (Matter Insights) SQL veritabanından çeker."""
+    result = await db.execute(select(MatterInsight).order_by(MatterInsight.created_at.desc()))
+    insights = result.scalars().all()
+    
+    # Eğer veritabanı boşsa varsayılan verilerle doldur (seeding)
+    if not insights:
+        defaults = [
+            MatterInsight(
+                id="ins-1",
+                title="Sorumluluk Sınırlandırması maddesinde tutarsızlık tespit edildi",
+                description="Son yüklenen Tedarikçi Sözleşmesi ana sözleşme standart maddesiyle (Bölüm 4.2) çelişen bir sorumluluk üst sınırı içeriyor.",
+                confidence=95,
+                matter_name="Küresel Lojistik"
+            ),
+            MatterInsight(
+                id="ins-2",
+                title="Rekabet yasağı süresi yasal sınırı aşıyor",
+                description="Yeni iş sözleşmesinde öngörülen 3 yıllık rekabet yasağı süresi, Türk Borçlar Kanunu madde 444 uyarınca belirlenen azami 2 yıllık sınırı aşmaktadır.",
+                confidence=98,
+                matter_name="İş Hukuku Uyum"
+            ),
+            MatterInsight(
+                id="ins-3",
+                title="Cezai şart maddesinde orantısız bedel",
+                description="Hizmet alım sözleşmesinin 8.1. maddesinde yüklenici aleyhine belirlenen cezai şart miktarı, edimler dengesine aykırı ve fahiş bulunmuştur.",
+                confidence=91,
+                matter_name="Kurumsal Tedarik"
+            )
+        ]
+        for item in defaults:
+            db.add(item)
+        await db.commit()
+        
+        result = await db.execute(select(MatterInsight).order_by(MatterInsight.created_at.desc()))
+        insights = result.scalars().all()
+
+    return [
+        {
+            "id": ins.id,
+            "title": ins.title,
+            "description": ins.description,
+            "confidence": ins.confidence,
+            "matter_name": ins.matter_name,
+            "created_at": ins.created_at.isoformat(),
+        }
+        for ins in insights
+    ]
+
+
 

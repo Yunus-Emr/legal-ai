@@ -17,10 +17,12 @@ import {
   Zap,
   RefreshCw,
   AlertCircle,
+  RotateCcw,
 } from "lucide-react";
 
 import { analyticsApi, type DashboardStats, type ActivityItem } from "@/lib/api";
 import { useAuthStore } from "@/store/authStore";
+import { RoleGuard } from "@/components/auth/RoleGuard";
 
 /* ── Dashboard Translations ────────────────────────────────────────────── */
 const TRANSLATIONS = {
@@ -146,8 +148,10 @@ export default function Dashboard() {
   const { user } = useAuthStore();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [activity, setActivity] = useState<ActivityItem[]>([]);
+  const [insights, setInsights] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isResetting, setIsResetting] = useState(false);
   const [backendOffline, setBackendOffline] = useState(false);
   const [lang, setLang] = useState<"tr" | "en">("tr");
 
@@ -180,12 +184,14 @@ export default function Dashboard() {
     if (!silent) setIsLoading(true);
     else setIsRefreshing(true);
     try {
-      const [statsRes, activityRes] = await Promise.all([
+      const [statsRes, activityRes, insightsRes] = await Promise.all([
         analyticsApi.dashboard(),
         analyticsApi.activity(),
+        analyticsApi.insights(),
       ]);
       setStats(statsRes.data);
       setActivity(activityRes.data);
+      setInsights(insightsRes.data);
       setBackendOffline(false);
     } catch (err: any) {
       const isNetworkErr = !err?.response;
@@ -198,6 +204,23 @@ export default function Dashboard() {
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
+    }
+  };
+
+  const handleReset = async () => {
+    const confirmMsg = lang === "tr" 
+      ? "Tüm sorgu loglarını ve ortalama yanıt süresi metriklerini sıfırlamak istediğinize emin misiniz?" 
+      : "Are you sure you want to reset all query logs and average response time metrics?";
+    if (!window.confirm(confirmMsg)) return;
+
+    setIsResetting(true);
+    try {
+      await analyticsApi.reset();
+      await fetchData(true);
+    } catch (err) {
+      console.error("Error resetting analytics:", err);
+    } finally {
+      setIsResetting(false);
     }
   };
 
@@ -231,7 +254,11 @@ export default function Dashboard() {
     },
     {
       label: t.avgResponse,
-      value: stats ? `${Math.round(stats.avg_response_time_ms)}ms` : "—",
+      value: stats 
+        ? stats.avg_response_time_ms >= 1000 
+          ? `${(stats.avg_response_time_ms / 1000).toFixed(2)}s` 
+          : `${Math.round(stats.avg_response_time_ms)}ms`
+        : "—",
       icon: Clock,
       trend: t.latencyDesc,
       alert: false,
@@ -239,44 +266,54 @@ export default function Dashboard() {
   ];
 
   return (
-    <div className="p-6 lg:p-8 h-full overflow-y-auto bg-background text-foreground">
-      {/* Backend offline banner */}
-      {backendOffline && (
-        <div className="mb-6 flex items-center gap-3 px-4 py-3 rounded-xl bg-warning/10 border border-warning/30 text-warning text-sm">
-          <AlertCircle className="w-4 h-4 shrink-0" />
-          <span>
-            <strong>{t.offlineBanner}</strong>
-          </span>
-        </div>
-      )}
+    <RoleGuard allowedRoles={["admin"]} redirectTo="/ai-canvas">
+      <div className="p-6 lg:p-8 h-full overflow-y-auto bg-background text-foreground">
+        {/* Backend offline banner */}
+        {backendOffline && (
+          <div className="mb-6 flex items-center gap-3 px-4 py-3 rounded-xl bg-warning/10 border border-warning/30 text-warning text-sm">
+            <AlertCircle className="w-4 h-4 shrink-0" />
+            <span>
+              <strong>{t.offlineBanner}</strong>
+            </span>
+          </div>
+        )}
 
-      {/* Header */}
-      <div className="flex justify-between items-end mb-8">
-        <div>
-          <h1 className="text-3xl font-semibold tracking-tight text-gradient">
-            Dashboard
-          </h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            {user?.name
-              ? `${t.welcome}, ${user.name.split(" ")[0]}. ${t.subtitle}`
-              : t.subtitle}
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => fetchData(true)}
-            disabled={isRefreshing}
-            className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-[#1A2235] transition-colors disabled:opacity-50"
-            title="Refresh"
-          >
-            <RefreshCw className={`w-4 h-4 ${isRefreshing ? "animate-spin" : ""}`} />
-          </button>
-          <div className="flex items-center gap-2 text-xs font-medium text-primary bg-primary/10 px-3 py-1.5 rounded-full border border-primary/20 ai-glow">
-            <ShieldCheck className="w-4 h-4" />
-            {t.health}
+        {/* Header */}
+        <div className="flex justify-between items-end mb-8">
+          <div>
+            <h1 className="text-3xl font-semibold tracking-tight text-gradient">
+              Dashboard
+            </h1>
+            <p className="text-sm text-muted-foreground mt-1">
+              {user?.name
+                ? `${t.welcome}, ${user.name.split(" ")[0]}. ${t.subtitle}`
+                : t.subtitle}
+            </p>
+          </div>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleReset}
+              disabled={isResetting}
+              className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold text-rose-500 hover:text-white bg-rose-500/10 hover:bg-rose-500 border border-rose-500/20 transition-all disabled:opacity-50 shadow-sm"
+              title={lang === "tr" ? "Metrikleri Sıfırla" : "Reset Metrics"}
+            >
+              <RotateCcw className={`w-3.5 h-3.5 ${isResetting ? "animate-spin" : ""}`} />
+              <span>{lang === "tr" ? "Metrikleri Sıfırla" : "Reset Metrics"}</span>
+            </button>
+            <button
+              onClick={() => fetchData(true)}
+              disabled={isRefreshing}
+              className="p-2.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-[#1A2235] border border-border transition-colors disabled:opacity-50"
+              title="Refresh"
+            >
+              <RefreshCw className={`w-4 h-4 ${isRefreshing ? "animate-spin" : ""}`} />
+            </button>
+            <div className="flex items-center gap-2 text-xs font-medium text-primary bg-primary/10 px-3 py-1.5 rounded-full border border-primary/20 ai-glow">
+              <ShieldCheck className="w-4 h-4" />
+              {t.health}
+            </div>
           </div>
         </div>
-      </div>
 
       {/* Metrics Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 mb-8">
@@ -385,29 +422,35 @@ export default function Dashboard() {
               </CardTitle>
             </CardHeader>
             <CardContent className="p-0">
-              <div className="divide-y divide-border">
-                {[1, 2, 3].map((i) => (
-                  <div
-                    key={i}
-                    className="p-4 hover:bg-[#1A2235]/50 transition-colors flex items-start gap-4 cursor-pointer group"
-                  >
-                    <div className="mt-1 w-2 h-2 rounded-full bg-primary ring-4 ring-primary/20 shrink-0" />
-                    <div className="flex-1">
-                      <h4 className="text-sm font-medium text-foreground group-hover:text-primary transition-colors">
-                        {t.discrepancyTitle}
-                      </h4>
-                      <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
-                        {t.discrepancyDesc}
-                      </p>
-                      <div className="mt-3 flex items-center gap-3 text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
-                        <span className="text-foreground">{t.matterLabel}</span> {t.globalLogistics}
-                        <span className="text-foreground ml-2">{t.confidenceLabel}</span> {92 + i}%
+              {insights.length === 0 ? (
+                <div className="p-8 text-center text-xs text-muted-foreground">
+                  {lang === "tr" ? "Henüz kritik analiz kaydı bulunamadı." : "No critical insights found yet."}
+                </div>
+              ) : (
+                <div className="divide-y divide-border">
+                  {insights.map((ins) => (
+                    <div
+                      key={ins.id}
+                      className="p-4 hover:bg-[#1A2235]/50 transition-colors flex items-start gap-4 cursor-pointer group"
+                    >
+                      <div className="mt-1 w-2 h-2 rounded-full bg-primary ring-4 ring-primary/20 shrink-0" />
+                      <div className="flex-1">
+                        <h4 className="text-sm font-medium text-foreground group-hover:text-primary transition-colors">
+                          {ins.title}
+                        </h4>
+                        <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
+                          {ins.description}
+                        </p>
+                        <div className="mt-3 flex items-center gap-3 text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
+                          <span className="text-foreground">{t.matterLabel}</span> {ins.matter_name}
+                          <span className="text-foreground ml-2">{t.confidenceLabel}</span> {ins.confidence}%
+                        </div>
                       </div>
+                      <ChevronRight className="w-5 h-5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
                     </div>
-                    <ChevronRight className="w-5 h-5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
         </motion.div>
@@ -481,5 +524,6 @@ export default function Dashboard() {
         </motion.div>
       </div>
     </div>
+  </RoleGuard>
   );
 }

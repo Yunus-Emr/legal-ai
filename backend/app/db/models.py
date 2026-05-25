@@ -140,3 +140,14 @@ class Matter(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     created_at = Column(DateTime, default=datetime.utcnow)
 
+
+class MatterInsight(Base):
+    __tablename__ = "matter_insights"
+    id = Column(String, primary_key=True)
+    title = Column(String, nullable=False)
+    description = Column(Text, nullable=False)
+    confidence = Column(Integer, default=95)
+    matter_name = Column(String, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+

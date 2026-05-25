@@ -62,17 +62,26 @@ class ChatRepository:
 
     async def get_sessions_by_user(self, user_id: str) -> List[Dict[str, Any]]:
         result = await self.db.execute(
-            select(ChatHistory.session_id, ChatHistory.created_at)
+            select(ChatHistory.session_id, ChatHistory.created_at, ChatHistory.role, ChatHistory.content)
             .where(ChatHistory.user_id == user_id)
-            .order_by(ChatHistory.created_at.desc())
+            .order_by(ChatHistory.created_at.asc())
         )
-        sessions = []
-        seen = set()
+        sessions_map = {}
         for row in result.all():
-            if row.session_id not in seen:
-                seen.add(row.session_id)
-                sessions.append({"session_id": row.session_id, "last_activity": row.created_at})
-        return sessions
+            sid = row.session_id
+            if sid not in sessions_map:
+                sessions_map[sid] = {
+                    "session_id": sid,
+                    "title": row.content[:35] + ("..." if len(row.content) > 35 else "") if row.role == "user" else "Sohbet",
+                    "last_activity": row.created_at
+                }
+            else:
+                sessions_map[sid]["last_activity"] = row.created_at
+                if sessions_map[sid]["title"] == "Sohbet" and row.role == "user":
+                    sessions_map[sid]["title"] = row.content[:35] + ("..." if len(row.content) > 35 else "")
+
+        sorted_sessions = sorted(sessions_map.values(), key=lambda x: x["last_activity"], reverse=True)
+        return sorted_sessions
 
     async def get_full_history(self, session_id: str, user_id: str) -> List[Dict[str, Any]]:
         result = await self.db.execute(

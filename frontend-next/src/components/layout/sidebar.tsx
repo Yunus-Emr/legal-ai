@@ -272,6 +272,11 @@ export function Sidebar() {
           if (section.category === t.MANAGEMENT && !isAdmin) return null;
 
           let itemsToRender = section.items;
+          if (section.category === t.WORKSPACE && !isAdmin) {
+            itemsToRender = itemsToRender.filter(
+              (item) => item.href !== "/"
+            );
+          }
           if (section.category === t.LEGAL_TOOLS && !isAdmin) {
             itemsToRender = itemsToRender.filter(
               (item) => item.label !== t.Compliance

@@ -168,6 +168,7 @@ async def chat_stream(
                 history = await chat_repo_h.get_recent_history(session_id)
 
             start_time = time.time()
+            first_token_time = None
             full_answer = ""
             sources = []
 
@@ -182,12 +183,16 @@ async def chat_stream(
                     sources = event["sources"]
                     yield f"data: {_json.dumps({'type': 'sources', 'sources': sources})}\n\n"
                 elif event["type"] == "token":
+                    if first_token_time is None:
+                        first_token_time = time.time()
                     full_answer += event["token"]
                     yield f"data: {_json.dumps({'type': 'token', 'token': event['token']})}\n\n"
                 elif event["type"] == "done":
                     pass  # done sonunda gönderilecek
 
-            duration_ms = int((time.time() - start_time) * 1000)
+            # Sistem gecikmesi (TTFT): Doküman getirme ve ilk kelimeyi üretme süresi (gerçek işlem hızı)
+            end_time = first_token_time if first_token_time else time.time()
+            duration_ms = int((end_time - start_time) * 1000)
 
             # Persist if authenticated
             if not is_guest:

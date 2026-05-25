@@ -5,18 +5,17 @@ import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/componen
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
-import { 
-  Send, FileText, Download, Sparkles, Network, Paperclip, 
+import {
+  Send, FileText, Download, Sparkles, Network, Paperclip,
   ThumbsUp, ThumbsDown, ChevronDown, BookOpen, Scale, CheckCircle2,
-  ArrowRight
+  ArrowRight, Plus, Trash2, MessageSquare, Folder, CornerDownLeft
 } from "lucide-react";
-import { type Source } from "@/lib/api";
+import { type Source, chatApi, documentsApi, Document } from "@/lib/api";
 import { motion, AnimatePresence } from "framer-motion";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useChat } from "@/hooks/useChat";
 import { useAuthStore } from "@/store/authStore";
-import { documentsApi, Document } from "@/lib/api";
 
 const DEFAULT_GUEST_DOCUMENTS: Document[] = [
   {
@@ -130,8 +129,8 @@ function CircularGauge({ score, size = 64, strokeWidth = 6 }: { score: number, s
   return (
     <div className="relative flex items-center justify-center" style={{ width: size, height: size }}>
       <svg width={size} height={size} className="transform -rotate-90">
-        <circle cx={size/2} cy={size/2} r={radius} stroke="currentColor" strokeWidth={strokeWidth} fill="transparent" className="text-border" />
-        <circle cx={size/2} cy={size/2} r={radius} stroke={color} strokeWidth={strokeWidth} fill="transparent" strokeDasharray={circumference} strokeDashoffset={offset} className="transition-all duration-1000 ease-out" />
+        <circle cx={size / 2} cy={size / 2} r={radius} stroke="currentColor" strokeWidth={strokeWidth} fill="transparent" className="text-border" />
+        <circle cx={size / 2} cy={size / 2} r={radius} stroke={color} strokeWidth={strokeWidth} fill="transparent" strokeDasharray={circumference} strokeDashoffset={offset} className="transition-all duration-1000 ease-out" />
       </svg>
       <div className="absolute flex flex-col items-center">
         <span className="text-sm font-bold font-mono" style={{ color }}>{score}</span>
@@ -165,21 +164,184 @@ function renderCleanPrompt(content: string): string {
     .trim();
 }
 
+function renderMarkdown(text: string) {
+  if (!text) return null;
+
+  const lines = text.split("\n");
+  let inList = false;
+  let listItems: React.ReactNode[] = [];
+  const elements: React.ReactNode[] = [];
+
+  const parseInlineStyles = (lineText: string) => {
+    const boldRegex = /\*\*(.*?)\*\*/g;
+    const parts = [];
+    let lastIndex = 0;
+    let match;
+
+    while ((match = boldRegex.exec(lineText)) !== null) {
+      if (match.index > lastIndex) {
+        parts.push(lineText.substring(lastIndex, match.index));
+      }
+      parts.push(
+        <strong key={match.index} className="font-extrabold text-foreground bg-primary/5 px-1 rounded">
+          {match[1]}
+        </strong>
+      );
+      lastIndex = boldRegex.lastIndex;
+    }
+
+    if (lastIndex < lineText.length) {
+      parts.push(lineText.substring(lastIndex));
+    }
+
+    return parts.length > 0 ? parts : lineText;
+  };
+
+  lines.forEach((line, idx) => {
+    const trimmed = line.trim();
+
+    if (trimmed.startsWith("###")) {
+      if (inList) {
+        elements.push(
+          <ul key={`list-${idx}`} className="list-disc pl-5 my-3 space-y-1 text-sm text-muted-foreground">
+            {listItems}
+          </ul>
+        );
+        listItems = [];
+        inList = false;
+      }
+      elements.push(
+        <h4 key={idx} className="text-sm font-bold text-foreground mt-4 mb-2 border-b border-border/40 pb-1 flex items-center gap-1.5">
+          <span className="w-1.5 h-3.5 bg-primary/70 rounded-full inline-block shrink-0" />
+          {parseInlineStyles(trimmed.replace(/^###\s*/, ""))}
+        </h4>
+      );
+    } else if (trimmed.startsWith("##")) {
+      if (inList) {
+        elements.push(
+          <ul key={`list-${idx}`} className="list-disc pl-5 my-3 space-y-1 text-sm text-muted-foreground">
+            {listItems}
+          </ul>
+        );
+        listItems = [];
+        inList = false;
+      }
+      elements.push(
+        <h3 key={idx} className="text-base font-bold text-foreground mt-5 mb-3 flex items-center gap-2">
+          <span className="w-2 h-4 bg-primary rounded-full inline-block shrink-0" />
+          {parseInlineStyles(trimmed.replace(/^##\s*/, ""))}
+        </h3>
+      );
+    } else if (trimmed.startsWith("-") || trimmed.startsWith("•") || (trimmed.match(/^\d+\.\s/) && inList)) {
+      inList = true;
+      const cleanedText = trimmed.replace(/^[-•]\s*/, "").replace(/^\d+\.\s*/, "");
+      listItems.push(
+        <li key={idx} className="text-sm leading-relaxed text-foreground/80 list-item pl-1">
+          {parseInlineStyles(cleanedText)}
+        </li>
+      );
+    } else if (trimmed === "") {
+      if (inList) {
+        elements.push(
+          <ul key={`list-${idx}`} className="list-disc pl-5 my-3 space-y-1 text-sm text-muted-foreground">
+            {listItems}
+          </ul>
+        );
+        listItems = [];
+        inList = false;
+      }
+    } else {
+      if (inList) {
+        elements.push(
+          <ul key={`list-${idx}`} className="list-disc pl-5 my-3 space-y-1 text-sm text-muted-foreground">
+            {listItems}
+          </ul>
+        );
+        listItems = [];
+        inList = false;
+      }
+      elements.push(
+        <p key={idx} className="text-sm leading-relaxed my-2 text-foreground/80 whitespace-pre-line font-normal">
+          {parseInlineStyles(line)}
+        </p>
+      );
+    }
+  });
+
+  if (inList && listItems.length > 0) {
+    elements.push(
+      <ul key={`list-final`} className="list-disc pl-5 my-3 space-y-1 text-sm text-muted-foreground">
+        {listItems}
+      </ul>
+    );
+  }
+
+  return <div className="space-y-1">{elements}</div>;
+}
+
 export default function AICanvasPage() {
   const { user } = useAuthStore();
   const [input, setInput] = useState("");
   const [mode, setMode] = useState("Contract Review");
   const [jurisdiction, setJurisdiction] = useState("Türk Hukuku");
   const [activeSource, setActiveSource] = useState<Source | null>(null);
-  
+
   const [documents, setDocuments] = useState<Document[]>([]);
   const [selectedDoc, setSelectedDoc] = useState<Document | null>(null);
   const [isLoadingDocs, setIsLoadingDocs] = useState(true);
   const [activeDocChunks, setActiveDocChunks] = useState<any[]>([]);
   const [isLoadingChunks, setIsLoadingChunks] = useState(false);
 
-  const { messages, isStreaming, sources, error, sendMessage } = useChat();
+  const { sessionId, messages, isStreaming, sources, error, sendMessage, clearChat, setSession } = useChat();
+  const [chatSessions, setChatSessions] = useState<any[]>([]);
+  const [isLoadingSessions, setIsLoadingSessions] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  const loadSessions = useCallback(() => {
+    if (!isGuest) {
+      setIsLoadingSessions(true);
+      chatApi.sessions()
+        .then(res => {
+          setChatSessions(res.data.sessions || []);
+          setIsLoadingSessions(false);
+        })
+        .catch(err => {
+          console.error("Error loading sessions:", err);
+          setIsLoadingSessions(false);
+        });
+    }
+  }, [isGuest]);
+
+  useEffect(() => {
+    loadSessions();
+  }, [loadSessions]);
+
+  const prevStreamingRef = useRef(false);
+  useEffect(() => {
+    if (prevStreamingRef.current && !isStreaming) {
+      loadSessions();
+    }
+    prevStreamingRef.current = isStreaming;
+  }, [isStreaming, loadSessions]);
+
+  const handleNewChat = () => {
+    clearChat();
+  };
+
+  const handleSelectSession = (sid: string) => {
+    chatApi.history(sid)
+      .then(res => {
+        const mapped = res.data.history.map((h: any) => ({
+          role: h.role,
+          content: h.content,
+          created_at: h.created_at
+        }));
+        setSession(sid, mapped);
+      })
+      .catch(err => {
+        console.error("Error loading session:", err);
+      });
+  };
 
   const isGuest = typeof window !== "undefined" && localStorage.getItem("lexai_guest") === "true";
 
@@ -228,7 +390,7 @@ export default function AICanvasPage() {
           let num = `P. ${chunk.page || idx + 1}`;
           let title = firstLine.length > 30 ? firstLine.substring(0, 30) + "..." : firstLine || `Bölüm ${idx + 1}`;
           let body = chunk.text;
-          
+
           const maddeMatch = chunk.text.match(/^(Madde\s+\d+|Kısım\s+[A-Z0-9]+|Bölüm\s+\d+)/i);
           if (maddeMatch) {
             num = maddeMatch[1];
@@ -281,7 +443,7 @@ export default function AICanvasPage() {
         enrichedPrompt += `[Primary Context Document: ${selectedDoc.filename}]\n`;
       }
       enrichedPrompt += input.trim();
-      
+
       sendMessage(enrichedPrompt);
       setInput("");
 
@@ -300,171 +462,196 @@ export default function AICanvasPage() {
       handleSend();
     }
   };
-
   return (
     <div className="h-full flex flex-col bg-background font-sans">
       {/* @ts-expect-error - known React 19 compat issue with react-resizable-panels prop types */}
       <ResizablePanelGroup direction="horizontal" className="flex-1">
-        
-        {/* Left Panel: 60% Document / Canvas */}
-        <ResizablePanel defaultSize={60} minSize={30} className="bg-surface/50 flex flex-col relative">
-          <div className="h-12 border-b border-border flex items-center justify-between px-4 bg-surface shrink-0 z-10">
-            <div className="flex items-center gap-3">
-              <FileText className="w-4 h-4 text-primary" />
-              <span className="text-sm font-medium font-mono">
-                {selectedDoc ? selectedDoc.filename : "Select a Document from Corpus"}
-              </span>
-              {selectedDoc && (
-                <span className="px-2 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider bg-success/10 text-success border border-success/20">
-                  {selectedDoc.status === 'indexed' ? 'Ready' : 'Processing'}
-                </span>
+
+        {/* Panel 1: ChatGPT-style Sidebar (Left) */}
+        <ResizablePanel
+          defaultSize={18}
+          minSize={12}
+          maxSize={25}
+          className="bg-slate-950 border-r border-slate-900 text-slate-200 flex flex-col p-4 shrink-0 relative"
+        >
+          {/* Yeni Sohbet Button */}
+          <Button
+            onClick={handleNewChat}
+            className="w-full justify-start gap-2 bg-slate-900 hover:bg-slate-800 text-slate-100 border border-slate-800 rounded-lg text-xs font-semibold py-5 transition-all mb-4 shadow-sm group"
+          >
+            <Plus className="w-4 h-4 text-primary group-hover:scale-110 transition-transform" />
+            Yeni Sohbet
+          </Button>
+
+          {/* History ScrollArea */}
+          <ScrollArea className="flex-1 -mx-2 px-2">
+            <div className="space-y-4">
+              <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest px-2 mb-2 flex items-center gap-1.5 select-none">
+                <MessageSquare className="w-3.5 h-3.5 text-slate-500" />
+                Geçmiş Sohbetler
+              </div>
+
+              {isGuest ? (
+                <p className="text-[10px] text-slate-500 italic px-2">
+                  Misafir modunda sohbet geçmişi kaydedilmez.
+                </p>
+              ) : isLoadingSessions ? (
+                <div className="space-y-2 px-2">
+                  {[1, 2, 3].map(i => (
+                    <div key={i} className="h-8 bg-slate-900/40 rounded-lg animate-pulse" />
+                  ))}
+                </div>
+              ) : chatSessions.length === 0 ? (
+                <p className="text-[10px] text-slate-500 italic px-2">
+                  Henüz geçmiş sohbet yok.
+                </p>
+              ) : (
+                chatSessions.map((session) => {
+                  const isActive = sessionId === session.session_id;
+                  return (
+                    <button
+                      key={session.session_id}
+                      onClick={() => handleSelectSession(session.session_id)}
+                      className={`w-full text-left px-3 py-2.5 rounded-lg text-xs font-medium transition-all flex items-center gap-2 group truncate ${isActive
+                          ? "bg-primary/20 text-primary border border-primary/30 shadow-[0_0_12px_rgba(59,111,232,0.15)]"
+                          : "text-slate-400 hover:bg-slate-900 hover:text-slate-200 border border-transparent"
+                        }`}
+                    >
+                      <MessageSquare className={`w-3.5 h-3.5 shrink-0 ${isActive ? "text-primary" : "text-slate-600 group-hover:text-slate-500"}`} />
+                      <span className="truncate flex-1 font-sans font-normal">{session.title || "Sohbet"}</span>
+                    </button>
+                  );
+                })
               )}
             </div>
-            {selectedDoc && (
-              <div className="flex items-center gap-2">
-                <Button variant="ghost" size="sm" className="h-8 text-xs text-muted-foreground hover:text-foreground" onClick={() => window.open(`/api/v1/documents/${selectedDoc.id}/download`, '_blank')}>
-                  <Download className="w-3.5 h-3.5 mr-2" />
-                  Download Original
-                </Button>
-                <Button variant="ghost" size="sm" className="h-8 text-xs text-muted-foreground hover:text-foreground" onClick={() => setSelectedDoc(null)}>
-                  Close
-                </Button>
-              </div>
-            )}
-          </div>
-          
-          <ScrollArea className="flex-1 p-8 bg-transparent">
-            {!selectedDoc ? (
-              <div className="max-w-3xl mx-auto space-y-4">
-                <h2 className="text-xl font-semibold mb-6">Your Corpus</h2>
-                {isLoadingDocs ? (
-                  <p className="text-muted-foreground animate-pulse">Loading documents...</p>
-                ) : documents.length === 0 ? (
-                  <div className="p-8 border border-dashed border-border rounded-xl text-center text-muted-foreground">
-                    No documents found. Go to the Documents tab to upload some.
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {documents.map(doc => (
-                      <div 
-                        key={doc.id} 
-                        onClick={() => setSelectedDoc(doc)}
-                        className="p-4 bg-surface border border-border rounded-xl hover:border-primary/50 cursor-pointer transition-all hover:shadow-[0_0_15px_rgba(59,111,232,0.1)] group"
-                      >
-                        <div className="flex items-center gap-3 mb-2">
-                          <div className="p-2 bg-primary/10 rounded-lg text-primary group-hover:bg-primary group-hover:text-white transition-colors">
-                            <FileText className="w-5 h-5" />
-                          </div>
-                          <p className="font-medium truncate flex-1">{doc.filename}</p>
-                        </div>
-                        <div className="flex items-center justify-between mt-4">
-                          <span className="text-xs text-muted-foreground">{(doc.size_bytes / 1024 / 1024).toFixed(2)} MB</span>
-                          <span className="text-xs px-2 py-1 bg-elevated rounded font-mono">{doc.chunk_count} chunks</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div className="flex flex-col h-full bg-white text-slate-900 rounded-xl shadow-lg border border-slate-200 overflow-hidden min-h-[750px] font-sans">
-                {/* Reader Header */}
-                <div className="px-6 py-4 bg-slate-50 border-b border-slate-200 flex justify-between items-center shrink-0">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 bg-rose-500/10 text-rose-500 rounded-lg">
-                      <FileText className="w-5 h-5" />
-                    </div>
-                    <div>
-                      <h3 className="font-bold text-sm text-slate-800 font-sans">
-                        {selectedDoc.filename}
-                      </h3>
-                      <p className="text-[10px] text-slate-500 mt-0.5 font-mono">
-                        {(selectedDoc.size_bytes / 1024).toFixed(1)} KB • {selectedDoc.chunk_count} Vektör Parçası
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="px-2 py-0.5 rounded text-[10px] font-extrabold uppercase bg-emerald-100 text-emerald-700 border border-emerald-200">
-                      RAG HAZIR
-                    </span>
-                    <Button variant="ghost" size="sm" className="h-8 text-xs text-slate-500 hover:text-slate-700" onClick={() => setSelectedDoc(null)}>
-                      Kapat
-                    </Button>
-                  </div>
-                </div>
-
-                <div className="flex flex-1 overflow-hidden">
-                  {/* Left Column: Article Quick Nav */}
-                  <div className="w-60 bg-slate-50 border-r border-slate-200 p-4 overflow-y-auto shrink-0 flex flex-col gap-2">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-2">Kanun Maddeleri</span>
-                    {isLoadingChunks ? (
-                      <p className="text-xs text-slate-400 animate-pulse">Yükleniyor...</p>
-                    ) : activeDocChunks.map((art, idx) => (
-                      <button
-                        key={idx}
-                        onClick={() => {
-                          const el = document.getElementById(`art-${idx}`);
-                          if (el) el.scrollIntoView({ behavior: 'smooth' });
-                        }}
-                        className="text-left px-3 py-2 rounded-lg text-xs font-medium text-slate-600 hover:bg-slate-200/60 hover:text-slate-900 transition-colors truncate"
-                      >
-                        <span className="font-bold text-rose-600 block text-[10px] font-mono">{art.num}</span>
-                        {art.title}
-                      </button>
-                    ))}
-                  </div>
-
-                  {/* Main Content Area: PDF Paper view */}
-                  <div className="flex-1 bg-slate-100 p-6 overflow-y-auto flex justify-center">
-                    <div className="w-full max-w-2xl bg-white shadow-md border border-slate-200 rounded-lg p-10 min-h-[900px] text-slate-800 font-serif leading-relaxed relative self-start">
-                      {/* Decorative watermarks */}
-                      <div className="absolute top-8 right-8 text-[9px] font-bold text-slate-300 font-mono tracking-widest select-none">
-                        LEXAI OFFICIAL READER
-                      </div>
-                      
-                      <h2 className="text-center font-bold text-lg text-slate-900 border-b pb-4 mb-8 font-sans">
-                        {selectedDoc.filename}
-                      </h2>
-
-                      <div className="space-y-8">
-                        {isLoadingChunks ? (
-                          <div className="flex flex-col items-center justify-center py-12 text-slate-400">
-                            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-rose-500 mb-4" />
-                            <p className="text-sm">Doküman metni sunucudan yükleniyor...</p>
-                          </div>
-                        ) : activeDocChunks.length === 0 ? (
-                          <p className="text-sm text-slate-500 text-center py-12">Bu dokümanda hiç metin parçası bulunamadı.</p>
-                        ) : (
-                          activeDocChunks.map((art, idx) => (
-                            <div key={idx} id={`art-${idx}`} className="scroll-mt-4">
-                              <h4 className="font-bold text-sm text-slate-900 font-sans flex items-center gap-2 mb-2">
-                                <span className="text-rose-600 font-mono text-xs px-2 py-0.5 bg-rose-50 rounded">
-                                  {art.num}
-                                </span>
-                                {art.title}
-                              </h4>
-                              <p className="text-sm text-slate-700 whitespace-pre-wrap pl-3 border-l-2 border-slate-200">
-                                {art.body}
-                              </p>
-                            </div>
-                          ))
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
           </ScrollArea>
         </ResizablePanel>
 
         <ResizableHandle className="w-1 bg-border hover:bg-primary/50 transition-colors relative z-20" />
 
-        {/* Right Panel: 40% AI Sidecar */}
-        <ResizablePanel defaultSize={40} minSize={30} className="bg-surface flex flex-col border-l border-border relative z-10 shadow-2xl">
-          
-          {/* Sidecar Header (Modes & Jurisdiction) */}
-          <div className="h-[auto] min-h-12 border-b border-border flex flex-wrap items-center justify-between px-4 py-2 shrink-0 glass-panel">
+        {/* Panel 2: Collapsible Document Reader (Middle, only shown if selectedDoc is set) */}
+        {selectedDoc && (
+          <>
+            <ResizablePanel defaultSize={48} minSize={30} maxSize={70} className="bg-surface/50 flex flex-col relative">
+              <div className="h-12 border-b border-border flex items-center justify-between px-4 bg-surface shrink-0 z-10">
+                <div className="flex items-center gap-3">
+                  <FileText className="w-4 h-4 text-rose-500" />
+                  <span className="text-xs font-medium font-mono truncate max-w-xs">
+                    {selectedDoc.filename}
+                  </span>
+                  <span className="px-2 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider bg-success/10 text-success border border-success/20">
+                    {selectedDoc.status === 'indexed' ? 'Ready' : 'Processing'}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button variant="ghost" size="sm" className="h-8 text-xs text-muted-foreground hover:text-foreground" onClick={() => window.open(`/api/v1/documents/${selectedDoc.id}/download`, '_blank')}>
+                    <Download className="w-3.5 h-3.5 mr-2" />
+                    İndir
+                  </Button>
+                  <Button variant="ghost" size="sm" className="h-8 text-xs text-muted-foreground hover:text-foreground" onClick={() => setSelectedDoc(null)}>
+                    Kapat
+                  </Button>
+                </div>
+              </div>
+
+              <ScrollArea className="flex-1 p-4 bg-transparent">
+                <div className="flex flex-col h-full bg-white text-slate-900 rounded-xl shadow-lg border border-slate-200 overflow-hidden min-h-[750px] font-sans">
+                  {/* Reader Header */}
+                  <div className="px-6 py-4 bg-slate-50 border-b border-slate-200 flex justify-between items-center shrink-0">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 bg-rose-500/10 text-rose-500 rounded-lg">
+                        <FileText className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <h3 className="font-bold text-sm text-slate-800 font-sans">
+                          {selectedDoc.filename}
+                        </h3>
+                        <p className="text-[10px] text-slate-500 mt-0.5 font-mono">
+                          {(selectedDoc.size_bytes / 1024).toFixed(1)} KB • {selectedDoc.chunk_count} Vektör Parçası
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="px-2 py-0.5 rounded text-[10px] font-extrabold uppercase bg-emerald-100 text-emerald-700 border border-emerald-200">
+                        RAG HAZIR
+                      </span>
+                      <Button variant="ghost" size="sm" className="h-8 text-xs text-slate-500 hover:text-slate-700" onClick={() => setSelectedDoc(null)}>
+                        Kapat
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-1 overflow-hidden">
+                    {/* Left Column: Article Quick Nav */}
+                    <div className="w-48 bg-slate-50 border-r border-slate-200 p-4 overflow-y-auto shrink-0 flex flex-col gap-2">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-2">Kanun Maddeleri</span>
+                      {isLoadingChunks ? (
+                        <p className="text-xs text-slate-400 animate-pulse">Yükleniyor...</p>
+                      ) : activeDocChunks.map((art, idx) => (
+                        <button
+                          key={idx}
+                          onClick={() => {
+                            const el = document.getElementById(`art-${idx}`);
+                            if (el) el.scrollIntoView({ behavior: 'smooth' });
+                          }}
+                          className="text-left px-3 py-2 rounded-lg text-xs font-medium text-slate-600 hover:bg-slate-200/60 hover:text-slate-900 transition-colors truncate"
+                        >
+                          <span className="font-bold text-rose-600 block text-[10px] font-mono">{art.num}</span>
+                          {art.title}
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Main Content Area: PDF Paper view */}
+                    <div className="flex-1 bg-slate-100 p-6 overflow-y-auto flex justify-center">
+                      <div className="w-full max-w-2xl bg-white shadow-md border border-slate-200 rounded-lg p-8 min-h-[900px] text-slate-800 font-serif leading-relaxed relative self-start">
+                        <div className="absolute top-6 right-6 text-[9px] font-bold text-slate-300 font-mono tracking-widest select-none">
+                          LEXAI OFFICIAL READER
+                        </div>
+
+                        <h2 className="text-center font-bold text-base text-slate-900 border-b pb-4 mb-6 font-sans">
+                          {selectedDoc.filename}
+                        </h2>
+
+                        <div className="space-y-6">
+                          {isLoadingChunks ? (
+                            <div className="flex flex-col items-center justify-center py-12 text-slate-400">
+                              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-rose-500 mb-4" />
+                              <p className="text-sm">Doküman metni yükleniyor...</p>
+                            </div>
+                          ) : activeDocChunks.length === 0 ? (
+                            <p className="text-sm text-slate-500 text-center py-12">Bu dokümanda hiç metin parçası bulunamadı.</p>
+                          ) : (
+                            activeDocChunks.map((art, idx) => (
+                              <div key={idx} id={`art-${idx}`} className="scroll-mt-4">
+                                <h4 className="font-bold text-sm text-slate-900 font-sans flex items-center gap-2 mb-1.5">
+                                  <span className="text-rose-600 font-mono text-[10px] px-1.5 py-0.5 bg-rose-50 rounded">
+                                    {art.num}
+                                  </span>
+                                  {art.title}
+                                </h4>
+                                <p className="text-xs text-slate-700 whitespace-pre-wrap pl-3 border-l border-slate-200">
+                                  {art.body}
+                                </p>
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </ScrollArea>
+            </ResizablePanel>
+            <ResizableHandle className="w-1 bg-border hover:bg-primary/50 transition-colors relative z-20" />
+          </>
+        )}
+
+        {/* Panel 3: Main AI Chat Panel */}
+        <ResizablePanel defaultSize={selectedDoc ? 34 : 82} minSize={30} className="bg-surface flex flex-col relative z-10 shadow-2xl">
+
+          {/* Main Top Header: Dynamic Dropdown Selector */}
+          <div className="h-14 border-b border-border flex items-center justify-between px-6 shrink-0 glass-panel bg-surface/80 backdrop-blur-md">
             <div className="flex items-center gap-2">
               <Sparkles className="w-4 h-4 text-[#7C3AED]" />
               <DropdownMenu>
@@ -485,26 +672,62 @@ export default function AICanvasPage() {
               </DropdownMenu>
             </div>
 
-            <div className="flex items-center gap-1.5 px-2.5 py-1 bg-rose-500/10 text-rose-500 border border-rose-500/20 rounded-lg text-[10px] font-bold font-mono uppercase tracking-wider">
-              <Scale className="w-3 h-3 text-rose-500" />
-              Türk Hukuku
+            <div className="flex items-center gap-3">
+              {/* Dynamic Document Reference Selector */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm" className="h-9 gap-2 border-border/80 bg-background text-xs font-semibold hover:bg-elevated transition-colors shadow-sm">
+                    <BookOpen className="w-4 h-4 text-rose-500" />
+                    {selectedDoc ? selectedDoc.filename : "Yasal Referans Belgesi Ekle"}
+                    <ChevronDown className="w-3.5 h-3.5 opacity-55" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-80 bg-elevated border-border text-foreground max-h-96 overflow-y-auto shadow-2xl p-1 rounded-xl">
+                  <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest p-3 block border-b border-border/50">
+                    BELGE SEÇİN (RAG İÇİN)
+                  </span>
+                  {documents.length === 0 ? (
+                    <div className="p-4 text-center text-xs text-muted-foreground">Belge bulunamadı.</div>
+                  ) : (
+                    documents.map(doc => (
+                      <DropdownMenuItem
+                        key={doc.id}
+                        onClick={() => setSelectedDoc(doc)}
+                        className="p-3 focus:bg-primary/10 cursor-pointer flex flex-col items-start gap-0.5 border-b border-border/20 last:border-b-0 rounded-lg"
+                      >
+                        <span className="font-semibold text-xs text-foreground truncate w-full">{doc.filename}</span>
+                        <span className="text-[10px] text-muted-foreground">{(doc.size_bytes / 1024).toFixed(1)} KB • {doc.chunk_count} parça</span>
+                      </DropdownMenuItem>
+                    ))
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
+
+              <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-rose-500/10 text-rose-500 border border-rose-500/20 rounded-lg text-[10px] font-bold font-mono uppercase tracking-wider shadow-sm select-none">
+                <Scale className="w-3.5 h-3.5 text-rose-500" />
+                Türk Hukuku
+              </div>
             </div>
           </div>
 
-          <div className="flex-1 p-4 bg-background relative overflow-y-auto" ref={scrollRef}>
-            <div className="flex flex-col gap-6 max-w-full pb-4">
-              
+          {/* Chat Messages */}
+          <div className="flex-1 p-6 bg-background relative overflow-y-auto" ref={scrollRef}>
+            <div className={`flex flex-col gap-6 pb-4 ${selectedDoc ? "w-full" : "max-w-3xl mx-auto"}`}>
+
               {/* Messages */}
               {messages.length === 0 ? (
-                <div className="flex flex-col items-center justify-center h-48 text-muted-foreground opacity-50">
-                  <Sparkles className="w-8 h-8 mb-4 text-[#7C3AED]" />
-                  <p className="text-sm">Instruct AI Co-Counsel below...</p>
+                <div className="flex flex-col items-center justify-center py-20 text-muted-foreground opacity-60">
+                  <Sparkles className="w-10 h-10 mb-4 text-[#7C3AED] animate-pulse" />
+                  <p className="text-sm font-medium tracking-wide">LexAI Yapay Zeka Hukuk Danışmanı</p>
+                  <p className="text-xs text-muted-foreground mt-2 max-w-sm text-center">
+                    Gelişmiş RAG altyapısı ile kanunları ve belgeleri inceler, hukuki mütalaaları anında ve referanslarıyla oluşturur.
+                  </p>
                 </div>
               ) : (
                 messages.map((msg, index) => {
                   const isUser = msg.role === "user";
                   return (
-                    <motion.div 
+                    <motion.div
                       key={index}
                       initial={{ opacity: 0, y: 10 }}
                       animate={{ opacity: 1, y: 0 }}
@@ -513,34 +736,38 @@ export default function AICanvasPage() {
                       {/* Avatar Row */}
                       <div className="flex items-center gap-2">
                         {!isUser && (
-                          <div className="w-6 h-6 rounded bg-[#7C3AED]/20 flex items-center justify-center border border-[#7C3AED]/30">
+                          <div className="w-6 h-6 rounded bg-[#7C3AED]/20 flex items-center justify-center border border-[#7C3AED]/30 shadow-sm">
                             <Sparkles className="w-3.5 h-3.5 text-[#7C3AED]" />
                           </div>
                         )}
-                        <span className={`text-xs font-medium ${isUser ? "text-muted-foreground" : "text-foreground font-semibold uppercase tracking-wider"}`}>
+                        <span className={`text-xs font-semibold ${isUser ? "text-muted-foreground" : "text-foreground uppercase tracking-wider"}`}>
                           {isUser ? user?.name || "User" : "LexAI"}
                         </span>
                         {isUser && (
-                          <div className="w-6 h-6 rounded bg-elevated flex items-center justify-center border border-border text-[10px] font-bold">
+                          <div className="w-6 h-6 rounded bg-elevated flex items-center justify-center border border-border text-[10px] font-bold shadow-sm">
                             {user?.name ? getInitials(user.name) : "US"}
                           </div>
                         )}
                       </div>
-                      
+
                       {/* Message Content */}
                       {isUser ? (
-                        <div className="glass-panel border border-border p-4 rounded-xl rounded-tr-none text-sm text-foreground shadow-sm max-w-[85%] font-sans whitespace-pre-wrap">
+                        <div className="glass-panel border border-border p-4 rounded-2xl rounded-tr-none text-sm text-foreground shadow-sm max-w-[85%] font-sans whitespace-pre-wrap">
                           {renderCleanPrompt(msg.content)}
                         </div>
                       ) : (
-                        <div className="ai-glow rounded-xl rounded-tl-none mt-1 w-full">
-                          <div className="glass-panel p-4 rounded-xl rounded-tl-none text-sm leading-relaxed text-foreground/90 font-sans whitespace-pre-wrap min-h-12">
-                            {msg.content || (isStreaming && index === messages.length - 1 ? <TypingDots /> : "")}
-                            
+                        <div className="ai-glow rounded-2xl rounded-tl-none mt-1 w-full shadow-md">
+                          <div className="glass-panel p-5 rounded-2xl rounded-tl-none text-sm leading-relaxed text-foreground/90 font-sans min-h-12">
+                            {msg.content ? (
+                              renderMarkdown(msg.content)
+                            ) : (
+                              isStreaming && index === messages.length - 1 ? <TypingDots /> : ""
+                            )}
+
                             {/* Sources (only show on last assistant msg if sources exist) */}
                             {!isStreaming && index === messages.length - 1 && sources.length > 0 && (
                               <div className="mt-5 pt-4 border-t border-border/50">
-                                <div className="flex items-center gap-2 text-xs font-bold text-[#A8B2C7] uppercase tracking-wider mb-3">
+                                <div className="flex items-center gap-2 text-xs font-bold text-[#A8B2C7] uppercase tracking-wider mb-3 select-none">
                                   <BookOpen className="w-3.5 h-3.5 text-primary" /> ATIFTA BULUNULAN KAYNAKLAR
                                 </div>
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -587,10 +814,10 @@ export default function AICanvasPage() {
                   );
                 })
               )}
-              
+
               {/* AI Error */}
               {error && (
-                <div className="text-red-400 text-sm text-center p-2 bg-red-400/10 rounded-lg">
+                <div className="text-red-400 text-sm text-center p-3 bg-red-400/10 rounded-xl border border-red-500/20 shadow-sm">
                   {error}
                 </div>
               )}
@@ -599,10 +826,10 @@ export default function AICanvasPage() {
 
           {/* Input Area */}
           <div className="p-4 glass-panel rounded-none border-x-0 border-b-0 shrink-0">
-            <div className="relative flex flex-col gap-2 glass-panel rounded-xl border border-border p-2 focus-within:ring-1 focus-within:ring-[#7C3AED] focus-within:border-[#7C3AED] transition-all shadow-inner">
-              
-              <Textarea 
-                placeholder="Instruct AI Co-Counsel... (Type '/' for commands)" 
+            <div className={`relative flex flex-col gap-2 glass-panel rounded-xl border border-border p-2 focus-within:ring-1 focus-within:ring-[#7C3AED] focus-within:border-[#7C3AED] transition-all shadow-inner ${selectedDoc ? "w-full" : "max-w-3xl mx-auto"}`}>
+
+              <Textarea
+                placeholder="Instruct AI Co-Counsel... (Type '/' for commands)"
                 className="min-h-[44px] max-h-[200px] bg-transparent border-0 focus-visible:ring-0 resize-none p-2 text-sm"
                 rows={2}
                 value={input}
@@ -610,7 +837,7 @@ export default function AICanvasPage() {
                 onKeyDown={handleKeyDown}
                 disabled={isStreaming}
               />
-              
+
               <div className="flex items-center justify-between pt-2 border-t border-border/50 px-1">
                 <div className="flex items-center gap-1 select-none">
                   <span className="text-[10px] text-muted-foreground/60 font-mono pl-1">
@@ -618,8 +845,8 @@ export default function AICanvasPage() {
                   </span>
                 </div>
 
-                <Button 
-                  size="icon" 
+                <Button
+                  size="icon"
                   className="shrink-0 rounded-lg h-8 w-8 bg-[#7C3AED] hover:bg-[#7C3AED]/90 text-white btn-scale"
                   onClick={handleSend}
                   disabled={!input.trim() || isStreaming}
@@ -628,7 +855,7 @@ export default function AICanvasPage() {
                 </Button>
               </div>
             </div>
-            <div className="mt-2 text-[10px] text-center text-muted-foreground/50 font-mono tracking-tight">
+            <div className="mt-2 text-[10px] text-center text-muted-foreground/50 font-mono tracking-tight select-none">
               AI-generated content may be inaccurate. Review before filing.
             </div>
           </div>
@@ -691,3 +918,4 @@ export default function AICanvasPage() {
     </div>
   );
 }
+ve
