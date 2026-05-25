@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
@@ -281,6 +281,8 @@ function renderMarkdown(text: string) {
 
 export default function AICanvasPage() {
   const { user } = useAuthStore();
+  const isGuest = !user || user.role === "guest" || (typeof window !== "undefined" && (localStorage.getItem("lexai_guest") === "true" || document.cookie.includes("lexai_guest=true")));
+
   const [input, setInput] = useState("");
   const [mode, setMode] = useState("Contract Review");
   const [jurisdiction, setJurisdiction] = useState("Türk Hukuku");
@@ -298,7 +300,10 @@ export default function AICanvasPage() {
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const loadSessions = useCallback(() => {
-    if (!isGuest) {
+    if (isGuest) {
+      const stored = JSON.parse(localStorage.getItem("lexai_guest_sessions") || "[]");
+      setChatSessions(stored);
+    } else {
       setIsLoadingSessions(true);
       chatApi.sessions()
         .then(res => {
@@ -328,22 +333,99 @@ export default function AICanvasPage() {
     clearChat();
   };
 
-  const handleSelectSession = (sid: string) => {
-    chatApi.history(sid)
-      .then(res => {
-        const mapped = res.data.history.map((h: any) => ({
-          role: h.role,
-          content: h.content,
-          created_at: h.created_at
-        }));
-        setSession(sid, mapped);
-      })
-      .catch(err => {
-        console.error("Error loading session:", err);
-      });
+  const handleSelectSession = useCallback((sid: string) => {
+    if (isGuest) {
+      const history = JSON.parse(localStorage.getItem(`lexai_guest_history_${sid}`) || "[]");
+      setSession(sid, history);
+    } else {
+      chatApi.history(sid)
+        .then(res => {
+          const mapped = res.data.history.map((h: any) => ({
+            role: h.role,
+            content: h.content,
+            created_at: h.created_at
+          }));
+          setSession(sid, mapped);
+        })
+        .catch(err => {
+          console.error("Error loading session:", err);
+        });
+    }
+  }, [isGuest, setSession]);
+
+  // Session active state restoration across dashboard/page navigations
+  useEffect(() => {
+    const savedSessionId = sessionStorage.getItem("lexai_active_session_id");
+    if (savedSessionId) {
+      handleSelectSession(savedSessionId);
+    }
+  }, [handleSelectSession]);
+
+  useEffect(() => {
+    if (sessionId) {
+      sessionStorage.setItem("lexai_active_session_id", sessionId);
+    } else {
+      sessionStorage.removeItem("lexai_active_session_id");
+    }
+  }, [sessionId]);
+
+  const handleDeleteSession = (e: React.MouseEvent, sid: string) => {
+    e.stopPropagation();
+    const confirmMsg = "Bu sohbeti silmek istediğinizden emin misiniz?";
+    if (!window.confirm(confirmMsg)) return;
+
+    if (isGuest) {
+      const stored = JSON.parse(localStorage.getItem("lexai_guest_sessions") || "[]");
+      const filtered = stored.filter((s: any) => s.session_id !== sid);
+      localStorage.setItem("lexai_guest_sessions", JSON.stringify(filtered));
+      localStorage.removeItem(`lexai_guest_history_${sid}`);
+      setChatSessions(filtered);
+      if (sessionId === sid) {
+        clearChat();
+      }
+    } else {
+      chatApi.delete(sid)
+        .then(() => {
+          setChatSessions(prev => prev.filter(s => s.session_id !== sid));
+          if (sessionId === sid) {
+            clearChat();
+          }
+        })
+        .catch(err => {
+          console.error("Error deleting session:", err);
+        });
+    }
   };
 
-  const isGuest = typeof window !== "undefined" && localStorage.getItem("lexai_guest") === "true";
+  useEffect(() => {
+    if (isGuest && !isStreaming && messages.length > 0 && sessionId) {
+      localStorage.setItem(`lexai_guest_history_${sessionId}`, JSON.stringify(messages));
+      
+      const storedSessions = JSON.parse(localStorage.getItem("lexai_guest_sessions") || "[]");
+      const exists = storedSessions.find((s: any) => s.session_id === sessionId);
+      if (!exists) {
+        const firstUserMsg = messages.find(m => m.role === "user")?.content || "Sohbet";
+        const cleanTitle = firstUserMsg.replace(/^\[Role:.*\]\n?/, "");
+        const title = cleanTitle.substring(0, 35) + (cleanTitle.length > 35 ? "..." : "");
+        const newSession = {
+          session_id: sessionId,
+          title: title,
+          last_activity: new Date().toISOString()
+        };
+        const updated = [newSession, ...storedSessions];
+        localStorage.setItem("lexai_guest_sessions", JSON.stringify(updated));
+        setChatSessions(updated);
+      } else {
+        const updated = storedSessions.map((s: any) => 
+          s.session_id === sessionId 
+            ? { ...s, last_activity: new Date().toISOString() } 
+            : s
+        );
+        localStorage.setItem("lexai_guest_sessions", JSON.stringify(updated));
+        setChatSessions(updated);
+      }
+    }
+  }, [isStreaming, messages, sessionId, isGuest]);
 
   useEffect(() => {
     if (isGuest) {
@@ -491,11 +573,7 @@ export default function AICanvasPage() {
                 Geçmiş Sohbetler
               </div>
 
-              {isGuest ? (
-                <p className="text-[10px] text-slate-500 italic px-2">
-                  Misafir modunda sohbet geçmişi kaydedilmez.
-                </p>
-              ) : isLoadingSessions ? (
+              {isLoadingSessions ? (
                 <div className="space-y-2 px-2">
                   {[1, 2, 3].map(i => (
                     <div key={i} className="h-8 bg-slate-900/40 rounded-lg animate-pulse" />
@@ -509,17 +587,26 @@ export default function AICanvasPage() {
                 chatSessions.map((session) => {
                   const isActive = sessionId === session.session_id;
                   return (
-                    <button
+                    <div
                       key={session.session_id}
                       onClick={() => handleSelectSession(session.session_id)}
-                      className={`w-full text-left px-3 py-2.5 rounded-lg text-xs font-medium transition-all flex items-center gap-2 group truncate ${isActive
+                      className={`w-full text-left px-3 py-2 rounded-lg text-xs font-medium transition-all flex items-center justify-between gap-2 group cursor-pointer border ${isActive
                           ? "bg-primary/20 text-primary border border-primary/30 shadow-[0_0_12px_rgba(59,111,232,0.15)]"
                           : "text-slate-400 hover:bg-slate-900 hover:text-slate-200 border border-transparent"
                         }`}
                     >
-                      <MessageSquare className={`w-3.5 h-3.5 shrink-0 ${isActive ? "text-primary" : "text-slate-600 group-hover:text-slate-500"}`} />
-                      <span className="truncate flex-1 font-sans font-normal">{session.title || "Sohbet"}</span>
-                    </button>
+                      <div className="flex items-center gap-2 truncate flex-1">
+                        <MessageSquare className={`w-3.5 h-3.5 shrink-0 ${isActive ? "text-primary" : "text-slate-600 group-hover:text-slate-500"}`} />
+                        <span className="truncate font-sans font-normal">{session.title || "Sohbet"}</span>
+                      </div>
+                      <button
+                        onClick={(e) => handleDeleteSession(e, session.session_id)}
+                        className="opacity-0 group-hover:opacity-100 p-1 hover:bg-slate-800 rounded text-slate-500 hover:text-rose-400 transition-all shrink-0 animate-in fade-in duration-200"
+                        title="Sohbeti Sil"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   );
                 })
               )}
@@ -718,7 +805,7 @@ export default function AICanvasPage() {
               {messages.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-20 text-muted-foreground opacity-60">
                   <Sparkles className="w-10 h-10 mb-4 text-[#7C3AED] animate-pulse" />
-                  <p className="text-sm font-medium tracking-wide">LexAI Yapay Zeka Hukuk Danışmanı</p>
+                  <p className="text-sm font-medium tracking-wide">LegalAI Yapay Zeka Hukuk Danışmanı</p>
                   <p className="text-xs text-muted-foreground mt-2 max-w-sm text-center">
                     Gelişmiş RAG altyapısı ile kanunları ve belgeleri inceler, hukuki mütalaaları anında ve referanslarıyla oluşturur.
                   </p>
@@ -741,7 +828,7 @@ export default function AICanvasPage() {
                           </div>
                         )}
                         <span className={`text-xs font-semibold ${isUser ? "text-muted-foreground" : "text-foreground uppercase tracking-wider"}`}>
-                          {isUser ? user?.name || "User" : "LexAI"}
+                          {isUser ? user?.name || "User" : "LegalAI"}
                         </span>
                         {isUser && (
                           <div className="w-6 h-6 rounded bg-elevated flex items-center justify-center border border-border text-[10px] font-bold shadow-sm">
@@ -918,4 +1005,3 @@ export default function AICanvasPage() {
     </div>
   );
 }
-ve

@@ -261,7 +261,7 @@ export function Sidebar() {
             <Scale className="w-5 h-5" />
           </div>
           {!isCollapsed && (
-            <span className="font-semibold text-lg tracking-tight shrink-0">LexAI</span>
+            <span className="font-semibold text-lg tracking-tight shrink-0">LegalAI</span>
           )}
         </Link>
       </div>

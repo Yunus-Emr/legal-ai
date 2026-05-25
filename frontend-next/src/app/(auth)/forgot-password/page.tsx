@@ -54,7 +54,7 @@ export default function ForgotPasswordPage() {
           <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#3B6FE8] to-[#1E2D45] flex items-center justify-center shadow-lg border border-[#3B6FE8]/30">
             <Scale className="w-5 h-5 text-white" />
           </div>
-          <span className="text-2xl tracking-tight font-semibold text-white">LexAI</span>
+          <span className="text-2xl tracking-tight font-semibold text-white">LegalAI</span>
         </div>
 
         <AnimatePresence mode="wait">

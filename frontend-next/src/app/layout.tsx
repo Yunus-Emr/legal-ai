@@ -19,7 +19,7 @@ const playfair = Playfair_Display({
 });
 
 export const metadata: Metadata = {
-  title: "LexAI | Enterprise Legal Intelligence",
+  title: "LegalAI | Enterprise Legal Intelligence",
   description: "Mission-critical legal operating system.",
 };
 
