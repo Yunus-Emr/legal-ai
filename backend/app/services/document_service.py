@@ -221,5 +221,10 @@ class DocumentService:
                 "chunk_count": doc.chunk_count
             }
 
+    async def get_document_chunks(self, doc_id: str) -> List[Dict[str, Any]]:
+        from app.vectorstore.opensearch_client import opensearch_client
+        return await opensearch_client.get_chunks_by_doc_id(doc_id)
+
 
 document_service = DocumentService()
+

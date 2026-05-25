@@ -1,5 +1,9 @@
 "use client";
 
+/**
+ * Main Dashboard — Dynamic Translation and Premium Aesthetics
+ */
+
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -15,9 +19,66 @@ import {
   AlertCircle,
 } from "lucide-react";
 
-
 import { analyticsApi, type DashboardStats, type ActivityItem } from "@/lib/api";
 import { useAuthStore } from "@/store/authStore";
+
+/* ── Dashboard Translations ────────────────────────────────────────────── */
+const TRANSLATIONS = {
+  tr: {
+    welcome: "Tekrar hoş geldin",
+    subtitle: "Kullanıcı paneline ve kurumsal zeka metriklerine genel bakış.",
+    health: "Sistem Durumu: Optimal",
+    totalDocs: "Toplam Doküman",
+    indexedChunks: "Vektör Parçaları",
+    aiQueries: "AI Sorguları",
+    avgResponse: "Ort. Yanıt Süresi",
+    inKb: "Bilgi bankasında",
+    embeddings: "Vektör yerleştirmeleri",
+    queriesDesc: "Toplam sorgu",
+    latencyDesc: "AI yanıt süresi",
+    matterInsights: "Kritik Hukuki Analizler",
+    discrepancyTitle: "Sorumluluk Sınırlandırması maddesinde tutarsızlık tespit edildi",
+    discrepancyDesc: "Son yüklenen Tedarikçi Sözleşmesi ana sözleşme standart maddesiyle (Bölüm 4.2) çelişen bir sorumluluk üst sınırı içeriyor.",
+    matterLabel: "Dosya:",
+    confidenceLabel: "Güven Oranı:",
+    globalLogistics: "Küresel Lojistik",
+    intelligenceFeed: "Zeka Olay Akışı",
+    noActivity: "Yakın zamanda olay gerçekleşmedi",
+    startQuerying: "Akışı görmek için doküman sorgulamaya başlayın.",
+    justNow: "az önce",
+    minAgo: "dakika önce",
+    hrsAgo: "saat önce",
+    daysAgo: "gün önce",
+    offlineBanner: "Backend bağlantısı kurulamadı. Sistem çevrimdışı modda çalışıyor. API sunucusunun çalıştığından emin olun."
+  },
+  en: {
+    welcome: "Welcome back",
+    subtitle: "Here's your enterprise overview and intelligence metrics.",
+    health: "System Health: Optimal",
+    totalDocs: "Total Documents",
+    indexedChunks: "Indexed Chunks",
+    aiQueries: "AI Queries",
+    avgResponse: "Avg Response",
+    inKb: "In knowledge base",
+    embeddings: "Vector embeddings",
+    queriesDesc: "Total queries",
+    latencyDesc: "AI response time",
+    matterInsights: "Urgent Matter Insights",
+    discrepancyTitle: "Discrepancy found in Limitation of Liability clause",
+    discrepancyDesc: "The recently uploaded Vendor Agreement contains a liability cap that contradicts the master service agreement standard terms (Section 4.2).",
+    matterLabel: "Matter:",
+    confidenceLabel: "Confidence:",
+    globalLogistics: "Global Logistics",
+    intelligenceFeed: "Intelligence Feed",
+    noActivity: "No recent activity",
+    startQuerying: "Start querying documents to see feed",
+    justNow: "just now",
+    minAgo: "min ago",
+    hrsAgo: "hours ago",
+    daysAgo: "days ago",
+    offlineBanner: "Backend connection could not be established. Operating in offline fallback mode."
+  }
+};
 
 function BriefcaseIcon(props: React.SVGProps<SVGSVGElement>) {
   return (
@@ -81,16 +142,6 @@ function getActivityStatusColor(type: string): string {
   return "bg-muted-foreground";
 }
 
-function timeAgo(isoString: string): string {
-  const diff = Date.now() - new Date(isoString).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return "just now";
-  if (mins < 60) return `${mins} min ago`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs} hour${hrs > 1 ? "s" : ""} ago`;
-  return `${Math.floor(hrs / 24)} days ago`;
-}
-
 export default function Dashboard() {
   const { user } = useAuthStore();
   const [stats, setStats] = useState<DashboardStats | null>(null);
@@ -98,6 +149,32 @@ export default function Dashboard() {
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [backendOffline, setBackendOffline] = useState(false);
+  const [lang, setLang] = useState<"tr" | "en">("tr");
+
+  /* Dynamic Translation Hook */
+  useEffect(() => {
+    const loadLang = () => {
+      try {
+        const p = JSON.parse(localStorage.getItem("lexai_prefs") || "{}");
+        if (p.lang === "tr" || p.lang === "en") setLang(p.lang);
+      } catch {}
+    };
+    loadLang();
+    window.addEventListener("lexai_prefs_changed", loadLang);
+    return () => window.removeEventListener("lexai_prefs_changed", loadLang);
+  }, []);
+
+  const t = TRANSLATIONS[lang] || TRANSLATIONS.tr;
+
+  const timeAgo = (isoString: string): string => {
+    const diff = Date.now() - new Date(isoString).getTime();
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1) return t.justNow;
+    if (mins < 60) return `${mins} ${t.minAgo}`;
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return `${hrs} ${t.hrsAgo}`;
+    return `${Math.floor(hrs / 24)} ${t.daysAgo}`;
+  };
 
   const fetchData = async (silent = false) => {
     if (!silent) setIsLoading(true);
@@ -111,7 +188,6 @@ export default function Dashboard() {
       setActivity(activityRes.data);
       setBackendOffline(false);
     } catch (err: any) {
-      // Network Error = backend not running — show warning banner, not crash
       const isNetworkErr = !err?.response;
       if (isNetworkErr) {
         setBackendOffline(true);
@@ -127,56 +203,54 @@ export default function Dashboard() {
 
   useEffect(() => {
     fetchData();
-    // Otomatik yenile — 60s
     const interval = setInterval(() => fetchData(true), 60000);
     return () => clearInterval(interval);
   }, []);
 
   const statCards = [
     {
-      label: "Total Documents",
+      label: t.totalDocs,
       value: stats ? stats.total_documents.toLocaleString() : "—",
       icon: BriefcaseIcon,
-      trend: stats ? "In knowledge base" : "Loading...",
+      trend: t.inKb,
       alert: false,
     },
     {
-      label: "Indexed Chunks",
+      label: t.indexedChunks,
       value: stats ? stats.total_chunks.toLocaleString() : "—",
       icon: Database,
-      trend: stats ? "Vector embeddings" : "Loading...",
+      trend: t.embeddings,
       alert: false,
     },
     {
-      label: "AI Queries",
+      label: t.aiQueries,
       value: stats ? stats.total_queries.toLocaleString() : "—",
       icon: Activity,
-      trend: stats ? "Total queries" : "Loading...",
+      trend: t.queriesDesc,
       alert: false,
     },
     {
-      label: "Avg Response",
+      label: t.avgResponse,
       value: stats ? `${Math.round(stats.avg_response_time_ms)}ms` : "—",
       icon: Clock,
-      trend: "AI response time",
+      trend: t.latencyDesc,
       alert: false,
     },
   ];
 
-
   return (
-    <div className="p-6 lg:p-8 h-full overflow-y-auto">
+    <div className="p-6 lg:p-8 h-full overflow-y-auto bg-background text-foreground">
       {/* Backend offline banner */}
       {backendOffline && (
         <div className="mb-6 flex items-center gap-3 px-4 py-3 rounded-xl bg-warning/10 border border-warning/30 text-warning text-sm">
           <AlertCircle className="w-4 h-4 shrink-0" />
           <span>
-            <strong>Backend bağlantısı kurulamadı.</strong> Sistem çevrimdışı modda çalışıyor. API sunucusunun çalıştığından emin olun.
+            <strong>{t.offlineBanner}</strong>
           </span>
         </div>
       )}
-      {/* Header */}
 
+      {/* Header */}
       <div className="flex justify-between items-end mb-8">
         <div>
           <h1 className="text-3xl font-semibold tracking-tight text-gradient">
@@ -184,8 +258,8 @@ export default function Dashboard() {
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
             {user?.name
-              ? `Welcome back, ${user.name.split(" ")[0]}. Here's your platform overview.`
-              : "Enterprise overview of matters, AI tasks, and intelligence metrics."}
+              ? `${t.welcome}, ${user.name.split(" ")[0]}. ${t.subtitle}`
+              : t.subtitle}
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -199,7 +273,7 @@ export default function Dashboard() {
           </button>
           <div className="flex items-center gap-2 text-xs font-medium text-primary bg-primary/10 px-3 py-1.5 rounded-full border border-primary/20 ai-glow">
             <ShieldCheck className="w-4 h-4" />
-            System Health: Optimal
+            {t.health}
           </div>
         </div>
       </div>
@@ -256,7 +330,6 @@ export default function Dashboard() {
 
       {/* Main Content Grid */}
       <div className="grid grid-cols-12 gap-6">
-
         {/* Left: 8 columns — Quick Stats + Insights */}
         <motion.div
           className="col-span-12 xl:col-span-8 flex flex-col gap-6"
@@ -269,21 +342,21 @@ export default function Dashboard() {
             {[
               {
                 icon: Database,
-                label: "Indexed Chunks",
+                label: t.indexedChunks,
                 value: stats ? stats.total_chunks.toLocaleString() : "—",
                 color: "text-[#10B981]",
                 bg: "bg-[#10B981]/10",
               },
               {
                 icon: Zap,
-                label: "Queries Today",
+                label: lang === "tr" ? "Sorgular (Bugün)" : "Queries (Today)",
                 value: stats ? stats.total_queries.toLocaleString() : "—",
                 color: "text-primary",
                 bg: "bg-primary/10",
               },
               {
-                icon: Activity,
-                label: "Avg Latency",
+                icon: Clock,
+                label: lang === "tr" ? "Gecikme Süresi" : "Avg Latency",
                 value: stats ? `${Math.round(stats.avg_response_time_ms)}ms` : "—",
                 color: "text-[#F59E0B]",
                 bg: "bg-[#F59E0B]/10",
@@ -308,7 +381,7 @@ export default function Dashboard() {
             <CardHeader className="border-b border-border/50 pb-4">
               <CardTitle className="text-lg font-medium flex items-center gap-2 text-gradient">
                 <FileText className="w-5 h-5 text-muted-foreground" />
-                Urgent Matter Insights
+                {t.matterInsights}
               </CardTitle>
             </CardHeader>
             <CardContent className="p-0">
@@ -321,16 +394,14 @@ export default function Dashboard() {
                     <div className="mt-1 w-2 h-2 rounded-full bg-primary ring-4 ring-primary/20 shrink-0" />
                     <div className="flex-1">
                       <h4 className="text-sm font-medium text-foreground group-hover:text-primary transition-colors">
-                        Discrepancy found in Limitation of Liability clause
+                        {t.discrepancyTitle}
                       </h4>
                       <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
-                        The recently uploaded &quot;Vendor_Agreement_v{i}.pdf&quot; contains a
-                        liability cap that contradicts the master service agreement standard
-                        terms (Section 4.2).
+                        {t.discrepancyDesc}
                       </p>
                       <div className="mt-3 flex items-center gap-3 text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
-                        <span className="text-foreground">Matter:</span> Global Logistics
-                        <span className="text-foreground ml-2">Confidence:</span> {92 + i}%
+                        <span className="text-foreground">{t.matterLabel}</span> {t.globalLogistics}
+                        <span className="text-foreground ml-2">{t.confidenceLabel}</span> {92 + i}%
                       </div>
                     </div>
                     <ChevronRight className="w-5 h-5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
@@ -352,7 +423,7 @@ export default function Dashboard() {
             <CardHeader className="border-b border-border/50 pb-4">
               <CardTitle className="text-lg font-medium flex items-center gap-2 text-gradient">
                 <Activity className="w-5 h-5 text-muted-foreground" />
-                Intelligence Feed
+                {t.intelligenceFeed}
               </CardTitle>
             </CardHeader>
             <CardContent className="p-4">
@@ -362,21 +433,30 @@ export default function Dashboard() {
                 <div className="space-y-6">
                   {activity.map((act, idx) => (
                     <div key={idx} className="relative pl-6">
-                      {/* Timeline line */}
                       {idx < activity.length - 1 && (
                         <div className="absolute left-[9px] top-5 bottom-[-16px] w-px bg-border" />
                       )}
-                      {/* Dot */}
                       <div
                         className={`absolute left-0 top-1.5 w-5 h-5 rounded-full border-2 border-[#111827] flex items-center justify-center ${getActivityStatusColor(act.type)}`}
                       >
                         <div className="w-1.5 h-1.5 bg-[#111827] rounded-full" />
                       </div>
                       <div>
-                        <p className="text-sm text-foreground">{act.description}</p>
+                        <p className="text-sm text-foreground">
+                          {lang === "tr"
+                            ? act.description
+                                .replace("User", "Kullanıcı")
+                                .replace("uploaded", "yükledi")
+                                .replace("queried", "sorguladı")
+                                .replace("deleted", "sildi")
+                                .replace("documents", "dokümanları")
+                            : act.description}
+                        </p>
                         <div className="flex items-center gap-2 mt-1">
                           <span className="text-xs font-medium text-muted-foreground capitalize">
-                            {act.type}
+                            {lang === "tr"
+                              ? act.type.replace("query", "sorgu").replace("upload", "yükleme").replace("delete", "silme")
+                              : act.type}
                           </span>
                           <span className="text-[10px] text-muted-foreground/60">•</span>
                           <span className="text-[10px] text-muted-foreground/80">
@@ -390,9 +470,9 @@ export default function Dashboard() {
               ) : (
                 <div className="flex flex-col items-center justify-center py-8 text-center">
                   <Activity className="w-8 h-8 text-muted-foreground/30 mb-3" />
-                  <p className="text-sm text-muted-foreground">No recent activity</p>
+                  <p className="text-sm text-muted-foreground">{t.noActivity}</p>
                   <p className="text-xs text-muted-foreground/60 mt-1">
-                    Start querying documents to see feed
+                    {t.startQuerying}
                   </p>
                 </div>
               )}

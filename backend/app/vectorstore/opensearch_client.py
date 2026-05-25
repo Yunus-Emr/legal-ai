@@ -105,6 +105,37 @@ class OpenSearchClient:
             body={"query": {"term": {"doc_id": doc_id}}},
         )
 
+    async def get_chunks_by_doc_id(self, doc_id: str) -> List[Dict[str, Any]]:
+        client = self._get_client()
+        if client is None:
+            raise RuntimeError("OpenSearch client yok")
+        
+        response = await client.search(
+            index=settings.OPENSEARCH_INDEX,
+            body={
+                "size": 500,
+                "query": {
+                    "term": {"doc_id": doc_id}
+                },
+                "sort": [
+                    {"page": {"order": "asc"}},
+                    {"chunk_id": {"order": "asc"}}
+                ]
+            }
+        )
+        
+        hits = []
+        for h in response["hits"]["hits"]:
+            source = h["_source"]
+            if "embedding" in source:
+                del source["embedding"]
+            hits.append({
+                "chunk_id": h["_id"],
+                **source
+            })
+        return hits
+
+
     async def hybrid_search(
         self,
         vector: List[float],

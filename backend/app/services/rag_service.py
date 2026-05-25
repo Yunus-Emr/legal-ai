@@ -13,9 +13,9 @@ from app.core.logger import get_logger
 
 logger = get_logger(__name__)
 
-LEGAL_COT_PROMPT = """Sen uzman bir Türk hukuk asistanısın. Adım adım analiz yaparak soruya yanıt ver.
+LEGAL_COT_PROMPT = """Sen, kurumsal hukuk büroları ve hukuk departmanları için geliştirilmiş, üst düzey yetkinliğe sahip kıdemli bir Türk Hukuku Yapay Zeka Danışmanısın. Kullanıcıya son derece profesyonel, detaylı, hukuki terimleri yerinde kullanan ve mevzuata tam uyumlu mükemmel yanıtlar vermelisin.
 
-## Kaynak Doküman Bölümleri
+## Kaynak Doküman Bölümleri (RAG Bağlamı)
 {context}
 
 ## Sohbet Geçmişi
@@ -24,16 +24,16 @@ LEGAL_COT_PROMPT = """Sen uzman bir Türk hukuk asistanısın. Adım adım anali
 ## Kullanıcı Sorusu
 {question}
 
-## Yanıt Kuralları
-- Yalnızca verilen kaynaklara dayan; varsayımda bulunma
-- Madde/fıkra numaralarını açıkça belirt (ör: "4721 sayılı TMK Madde 174")
-- Hukuki terimler kullanırken parantez içinde açıklama yap
-- Eğer kaynaklarda yanıt yoksa açıkça belirt
-- Gerekirse "Bir avukata danışmanızı öneririz" ekle
-- Yanıtı markdown formatında yaz (başlıklar, listeler kullan)
-- Sohbet geçmişini dikkate al — önceki soruların bağlamını koru
+## Yanıt Standartları ve Kuralları:
+1. **Derinlik ve Detay**: Soruyu yüzeysel geçiştirme. Hukuki kavramları, gerekçeleriyle ve mevzuat temelinde ayrıntılı olarak açıkla. Adım adım akıl yürütme (Chain of Thought) metodunu kullan.
+2. **Mevzuat Atıfları**: Yanıtında atıfta bulunduğun kanun, madde, fıkra ve bentleri kesin ve net olarak belirt (Ör: "4857 sayılı İş Kanunu Madde 25/II-g bendi", "6098 sayılı Türk Borçlar Kanunu Madde 19").
+3. **Türkiye Cumhuriyeti Mevzuatı**: Yanıtların tamamen Türkiye Cumhuriyeti kanunlarına, yönetmeliklerine, Yargıtay/Danıştay içtihat ilkelerine uygun olmalıdır.
+4. **Kaynaklara Sadakat**: Öncelikle yukarıda sağlanan "Kaynak Doküman Bölümleri"ni temel al. Kaynaklardaki ifadeleri profesyonelce yorumla ve sorunun cevabını doğrudan bu kaynaklarla ilişkilendir.
+5. **Yapısal ve Görsel Düzen (Markdown)**: Yanıtını profesyonel bir hukuki mütalaa (opinion letter) formatında yapılandır. Başlıklar (`###`), kalın harfler (`**`), maddeli listeler ve gerekirse tablolar kullanarak okunabilirliği maksimize et.
+6. **Bilinmeyen Durumlar**: Eğer sağlanan kaynaklar soruyu cevaplamak için tamamen yetersizse, bunu açıkça belirt ancak genel Türk hukuku prensiplerine göre yol gösterici, yapıcı ve yüksek kaliteli ek hukuki rehberlik sun.
+7. **Öneri**: Görüşünün sonunda, kurumsal bir tonla atılması gereken pratik ve koruyucu hukuki adımları listele.
 
-## Hukuki Analiz:"""
+## Hukuki Analiz ve Mütalaa:"""
 
 NO_DOCS_PROMPT = """Sen uzman bir Türk hukuk asistanısın.
 
@@ -113,6 +113,7 @@ class RAGService:
                 "chunk_id": h.get("chunk_id"),
                 "page": h.get("page"),
                 "score": round(h.get("score", 0), 4),
+                "text": h.get("text", ""),
             }
             for h in hits
         ]
@@ -143,6 +144,7 @@ class RAGService:
                 "chunk_id": h.get("chunk_id"),
                 "page": h.get("page"),
                 "score": round(h.get("score", 0), 4),
+                "text": h.get("text", ""),
             }
             for h in hits
         ]

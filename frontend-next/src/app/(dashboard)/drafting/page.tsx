@@ -25,10 +25,12 @@ import {
   HelpCircle,
   ArrowRight,
   User,
-  ExternalLink
+  ExternalLink,
+  Scale
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { draftsApi, chatApi, type Draft } from "@/lib/api";
+import { useAuthStore } from "@/store/authStore";
 
 // ── Types & Constants ────────────────────────────────────────────────────────
 interface ToastMessage {
@@ -48,12 +50,7 @@ const DOCUMENT_TYPES = [
   "General Court Petition (Dilekçe)"
 ];
 
-const JURISDICTIONS = [
-  "Republic of Turkey (TR)",
-  "United States (Delaware - US)",
-  "United Kingdom (E&W - UK)",
-  "European Union (GDPR Aligned)"
-];
+
 
 const TONES = [
   { value: "Formal & Balanced", label: "Balanced / Standard" },
@@ -62,6 +59,9 @@ const TONES = [
 ];
 
 export default function DraftingPage() {
+  const { user } = useAuthStore();
+  const isGuest = user?.role === "guest";
+
   // ── States ─────────────────────────────────────────────────────────────────
   const [drafts, setDrafts] = useState<Draft[]>([]);
   const [selectedDraft, setSelectedDraft] = useState<Draft | null>(null);
@@ -70,7 +70,7 @@ export default function DraftingPage() {
   // Form States
   const [prompt, setPrompt] = useState("");
   const [docType, setDocType] = useState(DOCUMENT_TYPES[0]);
-  const [jurisdiction, setJurisdiction] = useState(JURISDICTIONS[0]);
+  const [jurisdiction, setJurisdiction] = useState("Türk Hukuku");
   const [tone, setTone] = useState(TONES[0].value);
   const [customTitle, setCustomTitle] = useState("");
 
@@ -97,10 +97,18 @@ export default function DraftingPage() {
   const fetchDrafts = async (selectFirst = false) => {
     try {
       setLoading(true);
-      const res = await draftsApi.list();
-      setDrafts(res.data);
-      if (selectFirst && res.data.length > 0) {
-        setSelectedDraft(res.data[0]);
+      if (isGuest) {
+        const localData = JSON.parse(localStorage.getItem("lexai_guest_drafts") || "[]");
+        setDrafts(localData);
+        if (selectFirst && localData.length > 0) {
+          setSelectedDraft(localData[0]);
+        }
+      } else {
+        const res = await draftsApi.list();
+        setDrafts(res.data);
+        if (selectFirst && res.data.length > 0) {
+          setSelectedDraft(res.data[0]);
+        }
       }
     } catch (err: any) {
       showToast("Taslaklar alınamadı. Lütfen oturumunuzu kontrol edin.", "error");
@@ -111,7 +119,7 @@ export default function DraftingPage() {
 
   useEffect(() => {
     fetchDrafts(true);
-  }, []);
+  }, [isGuest]);
 
   // ── Auto Save Logic ────────────────────────────────────────────────────────
   const triggerAutoSave = (draftId: string, updatedTitle: string, updatedContent: string) => {
@@ -120,17 +128,27 @@ export default function DraftingPage() {
     setSavingStatus("saving");
     saveTimeoutRef.current = setTimeout(async () => {
       try {
-        await draftsApi.update(draftId, {
-          title: updatedTitle,
-          content: updatedContent
-        });
-        setSavingStatus("saved");
-        // Update local list
-        setDrafts((prev) =>
-          prev.map((d) =>
+        if (isGuest) {
+          const localData = JSON.parse(localStorage.getItem("lexai_guest_drafts") || "[]");
+          const updated = localData.map((d: any) =>
             d.id === draftId ? { ...d, title: updatedTitle, content: updatedContent } : d
-          )
-        );
+          );
+          localStorage.setItem("lexai_guest_drafts", JSON.stringify(updated));
+          setSavingStatus("saved");
+          setDrafts(updated);
+        } else {
+          await draftsApi.update(draftId, {
+            title: updatedTitle,
+            content: updatedContent
+          });
+          setSavingStatus("saved");
+          // Update local list
+          setDrafts((prev) =>
+            prev.map((d) =>
+              d.id === draftId ? { ...d, title: updatedTitle, content: updatedContent } : d
+            )
+          );
+        }
       } catch (err) {
         setSavingStatus("error");
         showToast("Otomatik kaydetme başarısız oldu.", "error");
@@ -156,13 +174,31 @@ export default function DraftingPage() {
   const handleCreateBlankDraft = async () => {
     try {
       const title = `Untitled ${docType.split(" ")[0]} Draft`;
-      const res = await draftsApi.create({
-        title,
-        content: `// ${docType} - Draft\n// Jurisdiction: ${jurisdiction}\n// Created on: ${new Date().toLocaleDateString()}\n\n`
-      });
-      setDrafts((prev) => [res.data, ...prev]);
-      setSelectedDraft(res.data);
-      showToast("Yeni boş taslak oluşturuldu.", "success");
+      const content = `// ${docType} - Draft\n// Jurisdiction: ${jurisdiction}\n// Created on: ${new Date().toLocaleDateString()}\n\n`;
+
+      if (isGuest) {
+        const localData = JSON.parse(localStorage.getItem("lexai_guest_drafts") || "[]");
+        const newDraft = {
+          id: Math.random().toString(36).substring(2, 9),
+          user_id: "guest",
+          title,
+          content,
+          created_at: new Date().toISOString()
+        };
+        const updated = [newDraft, ...localData];
+        localStorage.setItem("lexai_guest_drafts", JSON.stringify(updated));
+        setDrafts(updated);
+        setSelectedDraft(newDraft);
+        showToast("Yeni boş taslak oluşturuldu.", "success");
+      } else {
+        const res = await draftsApi.create({
+          title,
+          content
+        });
+        setDrafts((prev) => [res.data, ...prev]);
+        setSelectedDraft(res.data);
+        showToast("Yeni boş taslak oluşturuldu.", "success");
+      }
     } catch (err) {
       showToast("Taslak oluşturulamadı.", "error");
     }
@@ -191,17 +227,42 @@ Lütfen sadece hukuki belge metnini döndür, açıklama veya başlangıç/biti�
       const chatRes = await chatApi.send(aiQuery);
       const generatedContent = chatRes.data.answer;
 
-      // Save into drafts db
-      const newDraftRes = await draftsApi.create({
-        title,
-        content: generatedContent
-      });
+      // Simulate credit cost deduction ($0.15 per generated document)
+      if (typeof window !== "undefined") {
+        const currentSpent = Number(localStorage.getItem("lexai_spent_amount") || "1157.85");
+        localStorage.setItem("lexai_spent_amount", (currentSpent + 0.15).toString());
+        window.dispatchEvent(new Event("lexai_budget_changed"));
+      }
 
-      setDrafts((prev) => [newDraftRes.data, ...prev]);
-      setSelectedDraft(newDraftRes.data);
-      setPrompt("");
-      setCustomTitle("");
-      showToast("Hukuki taslak AI tarafından başarıyla üretildi!", "success");
+      if (isGuest) {
+        const localData = JSON.parse(localStorage.getItem("lexai_guest_drafts") || "[]");
+        const newDraft = {
+          id: Math.random().toString(36).substring(2, 9),
+          user_id: "guest",
+          title,
+          content: generatedContent,
+          created_at: new Date().toISOString()
+        };
+        const updated = [newDraft, ...localData];
+        localStorage.setItem("lexai_guest_drafts", JSON.stringify(updated));
+        setDrafts(updated);
+        setSelectedDraft(newDraft);
+        setPrompt("");
+        setCustomTitle("");
+        showToast("Hukuki taslak AI tarafından başarıyla üretildi!", "success");
+      } else {
+        // Save into drafts db
+        const newDraftRes = await draftsApi.create({
+          title,
+          content: generatedContent
+        });
+
+        setDrafts((prev) => [newDraftRes.data, ...prev]);
+        setSelectedDraft(newDraftRes.data);
+        setPrompt("");
+        setCustomTitle("");
+        showToast("Hukuki taslak AI tarafından başarıyla üretildi!", "success");
+      }
     } catch (err) {
       showToast("AI taslak üretiminde hata oluştu.", "error");
     } finally {
@@ -215,12 +276,23 @@ Lütfen sadece hukuki belge metnini döndür, açıklama veya başlangıç/biti�
     if (!confirm("Bu taslağı silmek istediğinizden emin misiniz?")) return;
 
     try {
-      await draftsApi.delete(id);
-      setDrafts((prev) => prev.filter((d) => d.id !== id));
-      if (selectedDraft?.id === id) {
-        setSelectedDraft(null);
+      if (isGuest) {
+        const localData = JSON.parse(localStorage.getItem("lexai_guest_drafts") || "[]");
+        const updated = localData.filter((d: any) => d.id !== id);
+        localStorage.setItem("lexai_guest_drafts", JSON.stringify(updated));
+        setDrafts(updated);
+        if (selectedDraft?.id === id) {
+          setSelectedDraft(null);
+        }
+        showToast("Taslak silindi.", "success");
+      } else {
+        await draftsApi.delete(id);
+        setDrafts((prev) => prev.filter((d) => d.id !== id));
+        if (selectedDraft?.id === id) {
+          setSelectedDraft(null);
+        }
+        showToast("Taslak silindi.", "success");
       }
-      showToast("Taslak silindi.", "success");
     } catch (err) {
       showToast("Taslak silinemedi.", "error");
     }
@@ -402,15 +474,10 @@ ${selectedDraft.content}`;
 
                     <div>
                       <span className="text-[11px] text-muted-foreground mb-1 block">Jurisdiction (Hukuk Düzeni)</span>
-                      <select
-                        value={jurisdiction}
-                        onChange={(e) => setJurisdiction(e.target.value)}
-                        className="w-full bg-elevated border border-border rounded-lg p-2.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-                      >
-                        {JURISDICTIONS.map((j) => (
-                          <option key={j} value={j}>{j}</option>
-                        ))}
-                      </select>
+                      <div className="w-full bg-elevated/40 border border-border/60 rounded-lg p-2.5 text-xs text-muted-foreground font-semibold flex items-center gap-2 select-none">
+                        <Scale className="w-3.5 h-3.5 text-rose-500" />
+                        Türkiye Cumhuriyeti (Türk Hukuku)
+                      </div>
                     </div>
 
                     <div>

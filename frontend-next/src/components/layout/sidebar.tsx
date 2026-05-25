@@ -1,6 +1,10 @@
 "use client";
 
-import { useState } from "react";
+/**
+ * Sidebar Component — Multi-Language Dynamic Translation
+ */
+
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -14,10 +18,7 @@ import {
   FileSignature,
   Edit3,
   ShieldCheck,
-  MessageSquare,
-  Globe,
   BarChart,
-  CreditCard,
   Settings,
   ShieldAlert,
   ChevronLeft,
@@ -28,35 +29,45 @@ import { cn } from "@/lib/utils";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useAuthStore } from "@/store/authStore";
 
-const NAVIGATION = [
-  {
-    category: "WORKSPACE",
-    items: [
-      { label: "Dashboard", icon: LayoutDashboard, href: "/" },
-      { label: "AI Assistant", icon: MessageSquareText, href: "/ai-canvas" },
-      { label: "My Cases", icon: Briefcase, href: "/cases" },
-      { label: "Documents", icon: FileText, href: "/documents" },
-      { label: "Settings", icon: Settings, href: "/settings" },
-    ],
+/* ── Translations ──────────────────────────────────────────────────────── */
+const TRANSLATIONS = {
+  tr: {
+    WORKSPACE: "Çalışma Alanı",
+    LEGAL_TOOLS: "Hukuk Araçları",
+    MANAGEMENT: "Yönetim",
+    ADMIN: "Yönetici",
+    Dashboard: "Dashboard",
+    AI_Assistant: "AI Asistanı",
+    My_Cases: "Davalarım",
+    Documents: "Doküman Havuzu",
+    Settings: "Ayarlar",
+    Legal_Research: "Hukuki Araştırma",
+    Contract_Analysis: "Sözleşme Analizi",
+    Drafting: "Sözleşme Yazımı",
+    Compliance: "Uyum ve Denetim",
+    Analytics: "Analizler",
+    Admin_Panel: "Yönetici Paneli",
+    Sign_out: "Çıkış Yap"
   },
-  {
-    category: "LEGAL TOOLS",
-    items: [
-      { label: "Legal Research", icon: Search, href: "/research" },
-      { label: "Contract Analysis", icon: FileSignature, href: "/contracts" },
-      { label: "Drafting", icon: Edit3, href: "/drafting" },
-      { label: "Compliance", icon: ShieldCheck, href: "/compliance" },
-    ],
-  },
-  {
-    category: "MANAGEMENT",
-    items: [
-      { label: "Analytics", icon: BarChart, href: "/analytics" },
-    ],
-  },
-];
-
-const ADMIN_ITEM = { label: "Admin Panel", icon: ShieldAlert, href: "/admin" };
+  en: {
+    WORKSPACE: "Workspace",
+    LEGAL_TOOLS: "Legal Tools",
+    MANAGEMENT: "Management",
+    ADMIN: "Admin",
+    Dashboard: "Dashboard",
+    AI_Assistant: "AI Assistant",
+    My_Cases: "My Cases",
+    Documents: "Documents",
+    Settings: "Settings",
+    Legal_Research: "Legal Research",
+    Contract_Analysis: "Contract Analysis",
+    Drafting: "Drafting",
+    Compliance: "Compliance",
+    Analytics: "Analytics",
+    Admin_Panel: "Admin Panel",
+    Sign_out: "Sign out"
+  }
+};
 
 /* ── NavItem: nav link with optional tooltip when collapsed ───────────── */
 function NavItem({
@@ -82,10 +93,10 @@ function NavItem({
         isAdmin
           ? isActive
             ? "bg-destructive/10 text-destructive border-l-2 border-destructive"
-            : "text-muted-foreground hover:bg-[#1A2235] hover:text-foreground"
+            : "text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
           : isActive
           ? "active-nav-glow"
-          : "text-muted-foreground hover:bg-[#1A2235] hover:text-foreground",
+          : "text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
         isCollapsed ? "justify-center px-2" : ""
       )}
     >
@@ -115,7 +126,7 @@ function NavItem({
       >
         {linkEl}
       </TooltipTrigger>
-      <TooltipContent side="right" className="ml-2 bg-[#1A2235] text-foreground border-border">
+      <TooltipContent side="right" className="ml-2 bg-sidebar-accent text-sidebar-accent-foreground border-sidebar-border">
         {label}
       </TooltipContent>
     </Tooltip>
@@ -126,9 +137,11 @@ function NavItem({
 function LogoutButton({
   isCollapsed,
   onClick,
+  label,
 }: {
   isCollapsed: boolean;
   onClick: () => void;
+  label: string;
 }) {
   if (!isCollapsed) {
     return (
@@ -138,7 +151,7 @@ function LogoutButton({
         className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-destructive/80 hover:bg-destructive/10 hover:text-destructive transition-all w-full"
       >
         <LogOut className="w-4 h-4 shrink-0" />
-        <span>Sign out</span>
+        <span>{label}</span>
       </button>
     );
   }
@@ -154,8 +167,8 @@ function LogoutButton({
           <LogOut className="w-4 h-4 shrink-0" />
         </span>
       </TooltipTrigger>
-      <TooltipContent side="right" className="ml-2 bg-[#1A2235] text-foreground border-border">
-        Sign out
+      <TooltipContent side="right" className="ml-2 bg-sidebar-accent text-sidebar-accent-foreground border-sidebar-border">
+        {label}
       </TooltipContent>
     </Tooltip>
   );
@@ -166,8 +179,53 @@ export function Sidebar() {
   const router = useRouter();
   const [isCollapsed, setIsCollapsed] = useState(false);
   const { user, logout } = useAuthStore();
+  const [lang, setLang] = useState<"tr" | "en">("tr");
 
+  /* Dynamic Translation Hook */
+  useEffect(() => {
+    const loadLang = () => {
+      try {
+        const p = JSON.parse(localStorage.getItem("lexai_prefs") || "{}");
+        if (p.lang === "tr" || p.lang === "en") setLang(p.lang);
+      } catch {}
+    };
+    loadLang();
+    window.addEventListener("lexai_prefs_changed", loadLang);
+    return () => window.removeEventListener("lexai_prefs_changed", loadLang);
+  }, []);
+
+  const t = TRANSLATIONS[lang] || TRANSLATIONS.tr;
   const isAdmin = user?.role === "admin";
+
+  const NAVIGATION = [
+    {
+      category: t.WORKSPACE,
+      items: [
+        { label: t.Dashboard, icon: LayoutDashboard, href: "/" },
+        { label: t.AI_Assistant, icon: MessageSquareText, href: "/ai-canvas" },
+        { label: t.My_Cases, icon: Briefcase, href: "/cases" },
+        { label: t.Documents, icon: FileText, href: "/documents" },
+        { label: t.Settings, icon: Settings, href: "/settings" },
+      ],
+    },
+    {
+      category: t.LEGAL_TOOLS,
+      items: [
+        { label: t.Legal_Research, icon: Search, href: "/research" },
+        { label: t.Contract_Analysis, icon: FileSignature, href: "/contracts" },
+        { label: t.Drafting, icon: Edit3, href: "/drafting" },
+        { label: t.Compliance, icon: ShieldCheck, href: "/compliance" },
+      ],
+    },
+    {
+      category: t.MANAGEMENT,
+      items: [
+        { label: t.Analytics, icon: BarChart, href: "/analytics" },
+      ],
+    },
+  ];
+
+  const ADMIN_ITEM = { label: t.Admin_Panel, icon: ShieldAlert, href: "/admin" };
 
   const handleLogout = () => {
     logout();
@@ -187,7 +245,7 @@ export function Sidebar() {
       <button
         type="button"
         onClick={() => setIsCollapsed(!isCollapsed)}
-        className="absolute -right-3 top-6 bg-[#1A2235] border border-border rounded-full p-1 text-muted-foreground hover:text-foreground z-30 shadow-md"
+        className="absolute -right-3 top-6 bg-sidebar border border-sidebar-border rounded-full p-1 text-sidebar-foreground hover:text-primary z-30 shadow-md"
       >
         {isCollapsed ? (
           <ChevronRight className="w-4 h-4" />
@@ -211,12 +269,12 @@ export function Sidebar() {
       {/* Navigation */}
       <div className="flex-1 overflow-y-auto py-4 space-y-6 overflow-x-hidden">
         {NAVIGATION.map((section, idx) => {
-          if (section.category === "MANAGEMENT" && !isAdmin) return null;
+          if (section.category === t.MANAGEMENT && !isAdmin) return null;
 
           let itemsToRender = section.items;
-          if (section.category === "LEGAL TOOLS" && !isAdmin) {
+          if (section.category === t.LEGAL_TOOLS && !isAdmin) {
             itemsToRender = itemsToRender.filter(
-              (item) => item.label !== "Compliance"
+              (item) => item.label !== t.Compliance
             );
           }
           if (itemsToRender.length === 0) return null;
@@ -251,7 +309,7 @@ export function Sidebar() {
           <div className="px-3">
             {!isCollapsed && (
               <div className="text-[10px] font-bold text-destructive/60 uppercase tracking-widest mb-2 px-3">
-                ADMIN
+                {t.ADMIN}
               </div>
             )}
             <nav>
@@ -272,11 +330,11 @@ export function Sidebar() {
       <div className="p-4 border-t border-border mt-auto">
         {!isCollapsed && user && (
           <div className="px-3 py-2 mb-2">
-            <p className="text-xs font-medium text-foreground truncate">{user.name}</p>
+            <p className="text-xs font-semibold text-foreground truncate">{user.name}</p>
             <p className="text-[10px] text-muted-foreground capitalize">{user.role}</p>
           </div>
         )}
-        <LogoutButton isCollapsed={isCollapsed} onClick={handleLogout} />
+        <LogoutButton isCollapsed={isCollapsed} onClick={handleLogout} label={t.Sign_out} />
       </div>
     </aside>
   );

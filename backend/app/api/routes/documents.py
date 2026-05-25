@@ -99,3 +99,14 @@ async def download_document(doc_id: str, current_user: User = Depends(get_curren
     if not os.path.exists(filepath):
         raise HTTPException(status_code=404, detail="Doküman diske kaydedilmemiş")
     return FileResponse(filepath, media_type="application/pdf", filename=f"{doc_id}.pdf")
+
+@router.get("/documents/{doc_id}/chunks")
+async def get_document_chunks_route(doc_id: str, current_user: User = Depends(get_current_user)):
+    """Dokümanın tüm chunk'larını OpenSearch'ten döner."""
+    try:
+        chunks = await document_service.get_document_chunks(doc_id)
+        return {"chunks": chunks}
+    except Exception as e:
+        logger.error(f"[Chunks] doc_id={doc_id} chunk alma hatası: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+

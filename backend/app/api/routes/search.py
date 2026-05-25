@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from typing import List, Optional
-from app.core.security import get_api_key
+from app.core.security import get_current_user
 from app.services.retrieval_service import retrieval_service
 from app.core.logger import get_logger
 import asyncio
@@ -37,7 +37,7 @@ class SearchResponse(BaseModel):
 @router.post("/search", response_model=SearchResponse)
 async def search(
     req: SearchRequest,
-    _: str = Depends(get_api_key),
+    _: str = Depends(get_current_user),
 ):
     """
     Semantik vektör araması — retrieval_service.

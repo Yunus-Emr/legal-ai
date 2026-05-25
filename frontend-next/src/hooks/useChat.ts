@@ -100,11 +100,15 @@ export function useChat(): ChatSession {
                 setSessionId(data.session_id);
               } else if (data.type === "token" && data.token !== undefined) {
                 setMessages((prev) => {
+                  if (prev.length === 0) return prev;
                   const newMsgs = [...prev];
-                  const last = newMsgs[newMsgs.length - 1];
+                  const lastIndex = newMsgs.length - 1;
+                  const last = newMsgs[lastIndex];
                   if (last && last.role === "assistant") {
-                    // Backend sends tokens that should be appended
-                    last.content += data.token;
+                    newMsgs[lastIndex] = {
+                      ...last,
+                      content: last.content + data.token,
+                    };
                   }
                   return newMsgs;
                 });

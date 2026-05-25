@@ -54,6 +54,7 @@ class SourceResult(BaseModel):
     chunk_id: Optional[str] = None
     page: Optional[int] = None
     score: Optional[float] = None
+    text: Optional[str] = None
 
 
 class ChatResponse(BaseModel):

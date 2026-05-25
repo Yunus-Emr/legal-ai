@@ -178,3 +178,4 @@ data/*
 
 # Test
 CREDENTIALS.md
+artifacts/

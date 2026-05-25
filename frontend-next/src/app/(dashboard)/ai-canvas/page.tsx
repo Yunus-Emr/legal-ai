@@ -7,14 +7,119 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { 
   Send, FileText, Download, Sparkles, Network, Paperclip, 
-  ThumbsUp, ThumbsDown, ChevronDown, BookOpen, Scale, CheckCircle2 
+  ThumbsUp, ThumbsDown, ChevronDown, BookOpen, Scale, CheckCircle2,
+  ArrowRight
 } from "lucide-react";
-import { motion } from "framer-motion";
+import { type Source } from "@/lib/api";
+import { motion, AnimatePresence } from "framer-motion";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useChat } from "@/hooks/useChat";
 import { useAuthStore } from "@/store/authStore";
 import { documentsApi, Document } from "@/lib/api";
+
+const DEFAULT_GUEST_DOCUMENTS: Document[] = [
+  {
+    id: "4857-is-kanunu",
+    filename: "4857_Sayili_Is_Kanunu.pdf",
+    size_bytes: 485700,
+    chunk_count: 42,
+    status: "indexed",
+    created_at: new Date().toISOString(),
+    user_id: null
+  },
+  {
+    id: "6098-borclar-kanunu",
+    filename: "6098_Sayili_Turk_Borclar_Kanunu.pdf",
+    size_bytes: 609800,
+    chunk_count: 85,
+    status: "indexed",
+    created_at: new Date().toISOString(),
+    user_id: null
+  },
+  {
+    id: "6102-ticaret-kanunu",
+    filename: "6102_Sayili_Turk_Ticaret_Kanunu.pdf",
+    size_bytes: 610200,
+    chunk_count: 120,
+    status: "indexed",
+    created_at: new Date().toISOString(),
+    user_id: null
+  }
+];
+
+const LEGAL_DOCUMENTS_TEXT: Record<string, { title: string, articles: { num: string, title: string, body: string }[] }> = {
+  "4857-is-kanunu": {
+    title: "4857 Sayılı İş Kanunu",
+    articles: [
+      {
+        num: "Madde 1",
+        title: "Amaç ve Kapsam",
+        body: "Bu Kanunun amacı, işverenler ile bir iş sözleşmesine dayanarak çalıştırılan işçilerin çalışma şartları ve çalışma ortamına ilişkin hak ve sorumluluklarını düzenlemektir."
+      },
+      {
+        num: "Madde 17",
+        title: "Süreli Fesih ve Bildirim Şartları",
+        body: "Belirsiz süreli iş sözleşmelerinin feshinden önce durumun diğer tarafa bildirilmesi gerekir. İş sözleşmeleri; işi altı aydan az sürmüş olan işçi için bildirimin diğer tarafa yapılmasından başlayarak iki hafta sonra, altı aydan birbuçuk yıla kadar sürmüş olan işçi için dört hafta sonra, birbuçuk yıldan üç yıla kadar sürmüş olan işçi için altı hafta sonra, üç yıldan fazla sürmüş işçi için sekiz hafta sonra feshedilmiş sayılır."
+      },
+      {
+        num: "Madde 25",
+        title: "İşverenin Haklı Nedenle Derhal Fesih Hakkı",
+        body: "Süresi belirli olsun veya olmasın işveren, aşağıda yazılı hallerde iş sözleşmesini sürenin bitiminden önce veya bildirim süresini beklemeksizin feshedebilir:\nI- Sağlık sebepleri...\nII- Ahlak ve iyi niyet kurallarına uymayan haller ve benzerleri:\na) İş sözleşmesi yapıldığı sırada bu sözleşmenin esaslı noktalarından biri için yalan söylemek...\ne) İşçinin, işverenin güvenini kötüye kullanmak, hırsızlık yapmak, işverenin meslek sırlarını ortaya atmak gibi doğruluk ve bağlılığa uymayan davranışlarda bulunması.\ng) İşçinin işverenden izin almaksızın veya haklı bir sebebe dayanmaksızın ardı ardına iki işgünü veya bir ay içinde iki defa herhangi bir tatil gününden sonraki iş günü, yahut bir ayda üç işgünü işine devam etmemesi."
+      },
+      {
+        num: "Madde 41",
+        title: "Fazla Çalışma Ücreti",
+        body: "Ülkenin genel yararları yahut işin niteliği veya üretimin artırılması gibi nedenlerle fazla çalışma yapılabilir. Fazla çalışma, Kanunda yazılı koşullar çerçevesinde, haftalık kırkbeş saati aşan çalışmalardır. Her bir saat fazla çalışma için verilecek ücret normal çalışma ücretinin saat başına düşen miktarının yüzde elli yükseltilmesiyle ödenir."
+      },
+      {
+        num: "Madde 53",
+        title: "Yıllık Ücretli İzin Hakkı",
+        body: "İşyerinde işe başladığı günden itibaren, deneme süresi de içinde olmak üzere, en az bir yıl çalışmış olan işçilere yıllık ücretli izin verilir. Yıllık ücretli izin hakkından vazgeçilemez. İşçilere verilecek yıllık ücretli izin süresi, hizmet süresi; bir yıldan beş yıla kadar olanlara ondört günden, beş yıldan fazla onbeş yıldan az olanlara yirmi günden, onbeş yıl ve daha fazla olanlara yirmialtı günden az olamaz."
+      }
+    ]
+  },
+  "6098-borclar-kanunu": {
+    title: "6098 Sayılı Türk Borçlar Kanunu",
+    articles: [
+      {
+        num: "Madde 1",
+        title: "Sözleşmenin Kurulması",
+        body: "Sözleşme, tarafların iradelerini karşılıklı ve birbirine uygun olarak açıklamalarıyla kurulur. İrade açıklaması, açık veya örtülü olabilir."
+      },
+      {
+        num: "Madde 2",
+        title: "İkinci Derecedeki Noktalar",
+        body: "Taraflar sözleşmenin esaslı noktalarında uyuşurlarsa, ikinci derecedeki noktalar üzerinde durulmamış olsa bile, sözleşme kurulmuş sayılır."
+      },
+      {
+        num: "Madde 112",
+        title: "Borcun İfa Edilmemesi - Genel Tazminat",
+        body: "Borç hiç veya gereği gibi ifa edilmezse borçlu, kendisine hiçbir kusurun yüklenemeyeceğini ispat etmedikçe, alacaklının bundan doğan zararını gidermekle yükümlüdür."
+      },
+      {
+        num: "Madde 125",
+        title: "Temerrüdün Hükümleri",
+        body: "Borçlunun temerrüdü üzerine alacaklı, her zaman borcun ifasını ve gecikme tazminatı isteme hakkına sahiptir. Alacaklı, ayrıca borcun ifasından vazgeçtiğini ve borcun ifa edilmemesinden doğan zararının giderilmesini isteyebilir veya sözleşmeden dönebilir."
+      }
+    ]
+  },
+  "6102-ticaret-kanunu": {
+    title: "6102 Sayılı Türk Ticaret Kanunu",
+    articles: [
+      {
+        num: "Madde 12",
+        title: "Tacir Sıfatı",
+        body: "Bir ticari işletmeyi, kısmen de olsa, kendi adına işleten kişiye tacir denir. Bir ticari işletmeyi kurup açtığını, sirküler, gazete, radyo, televizyon ve diğer ilan araçlarıyla halka bildirmiş veya işletmesini ticaret siciline tescil ettirerek durumu ilan etmiş olan kimse, fiilen işletmeye başlamamış olsa bile tacir sayılır."
+      },
+      {
+        num: "Madde 18",
+        title: "Basiretli İş İnsanı Gibi Davranma Yükümlülüğü",
+        body: "Her tacirin, ticaretine ait bütün faaliyetlerinde basiretli bir iş insanı gibi hareket etmesi gerekir. Tacirler, aralarındaki ticari işlerde kanunen öngörülen ihbar ve ihtarları noter aracılığıyla, taahhütlü mektupla, telgrafla veya güvenli elektronik imza kullanarak kayıtlı elektronik posta sistemiyle yaparlar."
+      }
+    ]
+  }
+};
 
 function CircularGauge({ score, size = 64, strokeWidth = 6 }: { score: number, size?: number, strokeWidth?: number }) {
   const radius = (size - strokeWidth) / 2;
@@ -49,28 +154,118 @@ function getInitials(name: string): string {
   return name.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2);
 }
 
+function renderCleanPrompt(content: string): string {
+  return content
+    .split("\n")
+    .filter(line => {
+      const trimmed = line.trim();
+      return !(trimmed.startsWith("[") && trimmed.endsWith("]"));
+    })
+    .join("\n")
+    .trim();
+}
+
 export default function AICanvasPage() {
   const { user } = useAuthStore();
   const [input, setInput] = useState("");
   const [mode, setMode] = useState("Contract Review");
-  const [jurisdiction, setJurisdiction] = useState("New York, USA");
+  const [jurisdiction, setJurisdiction] = useState("Türk Hukuku");
+  const [activeSource, setActiveSource] = useState<Source | null>(null);
   
   const [documents, setDocuments] = useState<Document[]>([]);
   const [selectedDoc, setSelectedDoc] = useState<Document | null>(null);
   const [isLoadingDocs, setIsLoadingDocs] = useState(true);
+  const [activeDocChunks, setActiveDocChunks] = useState<any[]>([]);
+  const [isLoadingChunks, setIsLoadingChunks] = useState(false);
 
   const { messages, isStreaming, sources, error, sendMessage } = useChat();
   const scrollRef = useRef<HTMLDivElement>(null);
 
+  const isGuest = typeof window !== "undefined" && localStorage.getItem("lexai_guest") === "true";
+
   useEffect(() => {
-    documentsApi.list().then(res => {
-      setDocuments(res.data.documents);
+    if (isGuest) {
+      setDocuments(DEFAULT_GUEST_DOCUMENTS);
       setIsLoadingDocs(false);
-    }).catch(err => {
-      console.error(err);
-      setIsLoadingDocs(false);
-    });
-  }, []);
+    } else {
+      documentsApi.list().then(res => {
+        setDocuments([...DEFAULT_GUEST_DOCUMENTS, ...res.data.documents]);
+        setIsLoadingDocs(false);
+      }).catch(err => {
+        console.error(err);
+        setDocuments(DEFAULT_GUEST_DOCUMENTS);
+        setIsLoadingDocs(false);
+      });
+    }
+  }, [isGuest]);
+
+  useEffect(() => {
+    if (!selectedDoc) {
+      setActiveDocChunks([]);
+      return;
+    }
+
+    if (selectedDoc.id in LEGAL_DOCUMENTS_TEXT) {
+      const docText = LEGAL_DOCUMENTS_TEXT[selectedDoc.id];
+      const guestChunks = docText.articles.map((art, idx) => ({
+        chunk_id: `${selectedDoc.id}-${idx}`,
+        page: idx + 1,
+        text: `${art.num} - ${art.title}\n\n${art.body}`,
+        num: art.num,
+        title: art.title,
+        body: art.body
+      }));
+      setActiveDocChunks(guestChunks);
+      return;
+    }
+
+    setIsLoadingChunks(true);
+    documentsApi.chunks(selectedDoc.id)
+      .then(res => {
+        const chunks = res.data.chunks || [];
+        const mapped = chunks.map((chunk: any, idx: number) => {
+          const firstLine = chunk.text.split("\n")[0] || "";
+          let num = `P. ${chunk.page || idx + 1}`;
+          let title = firstLine.length > 30 ? firstLine.substring(0, 30) + "..." : firstLine || `Bölüm ${idx + 1}`;
+          let body = chunk.text;
+          
+          const maddeMatch = chunk.text.match(/^(Madde\s+\d+|Kısım\s+[A-Z0-9]+|Bölüm\s+\d+)/i);
+          if (maddeMatch) {
+            num = maddeMatch[1];
+            const lines = chunk.text.split("\n");
+            title = lines[0].replace(maddeMatch[0], "").replace(/^[.:\-\s]+/, "").trim();
+            if (!title) {
+              title = lines[1] || `Detay`;
+            }
+            body = lines.slice(1).join("\n").trim();
+          }
+
+          return {
+            chunk_id: chunk.chunk_id,
+            page: chunk.page || idx + 1,
+            num,
+            title,
+            body
+          };
+        });
+        setActiveDocChunks(mapped);
+        setIsLoadingChunks(false);
+      })
+      .catch(err => {
+        console.error("Error fetching document chunks:", err);
+        setActiveDocChunks([
+          {
+            chunk_id: "error",
+            page: 1,
+            num: "Hata",
+            title: "Yüklenemedi",
+            body: "Dokümanın metin parçaları sunucudan alınırken bir hata oluştu veya henüz indekslenmedi."
+          }
+        ]);
+        setIsLoadingChunks(false);
+      });
+  }, [selectedDoc]);
+
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -89,6 +284,13 @@ export default function AICanvasPage() {
       
       sendMessage(enrichedPrompt);
       setInput("");
+
+      // Simulate credit cost deduction ($0.05 per AI query)
+      if (typeof window !== "undefined") {
+        const currentSpent = Number(localStorage.getItem("lexai_spent_amount") || "1157.85");
+        localStorage.setItem("lexai_spent_amount", (currentSpent + 0.05).toString());
+        window.dispatchEvent(new Event("lexai_budget_changed"));
+      }
     }
   };
 
@@ -165,13 +367,91 @@ export default function AICanvasPage() {
                 )}
               </div>
             ) : (
-              <div className="max-w-3xl mx-auto bg-white/5 shadow-sm border border-border rounded-xl p-10 min-h-[800px] text-foreground font-serif">
-                <div className="flex items-center justify-center h-full min-h-[400px] flex-col opacity-50">
-                  <FileText className="w-16 h-16 mb-4 text-muted-foreground" />
-                  <p className="text-center font-sans">
-                    {selectedDoc.filename} is loaded in the AI context.<br/>
-                    <span className="text-sm mt-2 block">You can now query specific provisions on the right panel.</span>
-                  </p>
+              <div className="flex flex-col h-full bg-white text-slate-900 rounded-xl shadow-lg border border-slate-200 overflow-hidden min-h-[750px] font-sans">
+                {/* Reader Header */}
+                <div className="px-6 py-4 bg-slate-50 border-b border-slate-200 flex justify-between items-center shrink-0">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-rose-500/10 text-rose-500 rounded-lg">
+                      <FileText className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-sm text-slate-800 font-sans">
+                        {selectedDoc.filename}
+                      </h3>
+                      <p className="text-[10px] text-slate-500 mt-0.5 font-mono">
+                        {(selectedDoc.size_bytes / 1024).toFixed(1)} KB • {selectedDoc.chunk_count} Vektör Parçası
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="px-2 py-0.5 rounded text-[10px] font-extrabold uppercase bg-emerald-100 text-emerald-700 border border-emerald-200">
+                      RAG HAZIR
+                    </span>
+                    <Button variant="ghost" size="sm" className="h-8 text-xs text-slate-500 hover:text-slate-700" onClick={() => setSelectedDoc(null)}>
+                      Kapat
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="flex flex-1 overflow-hidden">
+                  {/* Left Column: Article Quick Nav */}
+                  <div className="w-60 bg-slate-50 border-r border-slate-200 p-4 overflow-y-auto shrink-0 flex flex-col gap-2">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-2">Kanun Maddeleri</span>
+                    {isLoadingChunks ? (
+                      <p className="text-xs text-slate-400 animate-pulse">Yükleniyor...</p>
+                    ) : activeDocChunks.map((art, idx) => (
+                      <button
+                        key={idx}
+                        onClick={() => {
+                          const el = document.getElementById(`art-${idx}`);
+                          if (el) el.scrollIntoView({ behavior: 'smooth' });
+                        }}
+                        className="text-left px-3 py-2 rounded-lg text-xs font-medium text-slate-600 hover:bg-slate-200/60 hover:text-slate-900 transition-colors truncate"
+                      >
+                        <span className="font-bold text-rose-600 block text-[10px] font-mono">{art.num}</span>
+                        {art.title}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Main Content Area: PDF Paper view */}
+                  <div className="flex-1 bg-slate-100 p-6 overflow-y-auto flex justify-center">
+                    <div className="w-full max-w-2xl bg-white shadow-md border border-slate-200 rounded-lg p-10 min-h-[900px] text-slate-800 font-serif leading-relaxed relative self-start">
+                      {/* Decorative watermarks */}
+                      <div className="absolute top-8 right-8 text-[9px] font-bold text-slate-300 font-mono tracking-widest select-none">
+                        LEXAI OFFICIAL READER
+                      </div>
+                      
+                      <h2 className="text-center font-bold text-lg text-slate-900 border-b pb-4 mb-8 font-sans">
+                        {selectedDoc.filename}
+                      </h2>
+
+                      <div className="space-y-8">
+                        {isLoadingChunks ? (
+                          <div className="flex flex-col items-center justify-center py-12 text-slate-400">
+                            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-rose-500 mb-4" />
+                            <p className="text-sm">Doküman metni sunucudan yükleniyor...</p>
+                          </div>
+                        ) : activeDocChunks.length === 0 ? (
+                          <p className="text-sm text-slate-500 text-center py-12">Bu dokümanda hiç metin parçası bulunamadı.</p>
+                        ) : (
+                          activeDocChunks.map((art, idx) => (
+                            <div key={idx} id={`art-${idx}`} className="scroll-mt-4">
+                              <h4 className="font-bold text-sm text-slate-900 font-sans flex items-center gap-2 mb-2">
+                                <span className="text-rose-600 font-mono text-xs px-2 py-0.5 bg-rose-50 rounded">
+                                  {art.num}
+                                </span>
+                                {art.title}
+                              </h4>
+                              <p className="text-sm text-slate-700 whitespace-pre-wrap pl-3 border-l-2 border-slate-200">
+                                {art.body}
+                              </p>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
             )}
@@ -205,21 +485,10 @@ export default function AICanvasPage() {
               </DropdownMenu>
             </div>
 
-            <DropdownMenu>
-              {/* @ts-expect-error */}
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="sm" className="h-8 text-xs text-muted-foreground hover:text-foreground px-2 font-mono">
-                  <Scale className="w-3.5 h-3.5 mr-2" />
-                  {jurisdiction} <ChevronDown className="w-3 h-3 ml-1 opacity-50" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-48 bg-elevated border-border text-foreground">
-                <DropdownMenuItem onClick={() => setJurisdiction("New York, USA")}>New York, USA</DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setJurisdiction("Delaware, USA")}>Delaware, USA</DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setJurisdiction("California, USA")}>California, USA</DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setJurisdiction("London, UK")}>London, UK</DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            <div className="flex items-center gap-1.5 px-2.5 py-1 bg-rose-500/10 text-rose-500 border border-rose-500/20 rounded-lg text-[10px] font-bold font-mono uppercase tracking-wider">
+              <Scale className="w-3 h-3 text-rose-500" />
+              Türk Hukuku
+            </div>
           </div>
 
           <div className="flex-1 p-4 bg-background relative overflow-y-auto" ref={scrollRef}>
@@ -261,7 +530,7 @@ export default function AICanvasPage() {
                       {/* Message Content */}
                       {isUser ? (
                         <div className="glass-panel border border-border p-4 rounded-xl rounded-tr-none text-sm text-foreground shadow-sm max-w-[85%] font-sans whitespace-pre-wrap">
-                          {msg.content}
+                          {renderCleanPrompt(msg.content)}
                         </div>
                       ) : (
                         <div className="ai-glow rounded-xl rounded-tl-none mt-1 w-full">
@@ -270,18 +539,33 @@ export default function AICanvasPage() {
                             
                             {/* Sources (only show on last assistant msg if sources exist) */}
                             {!isStreaming && index === messages.length - 1 && sources.length > 0 && (
-                              <div className="mt-4 p-3 bg-black/40 rounded-lg border border-border">
-                                <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground mb-2">
-                                  <BookOpen className="w-3.5 h-3.5" /> SOURCES
+                              <div className="mt-5 pt-4 border-t border-border/50">
+                                <div className="flex items-center gap-2 text-xs font-bold text-[#A8B2C7] uppercase tracking-wider mb-3">
+                                  <BookOpen className="w-3.5 h-3.5 text-primary" /> ATIFTA BULUNULAN KAYNAKLAR
                                 </div>
-                                <ul className="space-y-2">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                   {sources.map((src, i) => (
-                                    <li key={i} className="text-[11px] flex gap-2">
-                                      <span className="text-primary font-bold">[{i+1}]</span>
-                                      <span className="text-muted-foreground font-mono">{src.document_name} {src.page ? `(Page ${src.page})` : ""}</span>
-                                    </li>
+                                    <div
+                                      key={i}
+                                      onClick={() => setActiveSource(src)}
+                                      className="flex items-center gap-3 p-3 bg-[#0C1222] border border-border/80 rounded-xl hover:border-rose-500/50 cursor-pointer transition-all duration-200 group shadow-sm hover:shadow-[0_0_12px_rgba(239,68,68,0.06)]"
+                                    >
+                                      {/* PDF Icon Badge */}
+                                      <div className="p-2 bg-rose-500/10 text-rose-500 rounded-lg border border-rose-500/20 group-hover:bg-rose-500 group-hover:text-white transition-colors shrink-0">
+                                        <FileText className="w-4 h-4" />
+                                      </div>
+                                      <div className="min-w-0 flex-1">
+                                        <p className="text-[11px] font-semibold text-foreground truncate">{src.document_name}</p>
+                                        <p className="text-[9px] text-muted-foreground mt-0.5 font-mono">
+                                          {src.page ? `Sayfa ${src.page}` : "Genel"} • Skor: %{((src.score || 0) * 100).toFixed(0)}
+                                        </p>
+                                      </div>
+                                      <div className="text-[10px] text-primary group-hover:translate-x-0.5 transition-transform shrink-0 font-medium flex items-center gap-0.5">
+                                        Oku <ArrowRight className="w-3 h-3" />
+                                      </div>
+                                    </div>
                                   ))}
-                                </ul>
+                                </div>
                               </div>
                             )}
 
@@ -328,25 +612,10 @@ export default function AICanvasPage() {
               />
               
               <div className="flex items-center justify-between pt-2 border-t border-border/50 px-1">
-                <div className="flex items-center gap-1">
-                  <Tooltip>
-                    {/* @ts-ignore */}
-                    <TooltipTrigger asChild>
-                      <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-primary rounded-lg">
-                        <Paperclip className="w-4 h-4" />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent className="text-xs">Attach Document</TooltipContent>
-                  </Tooltip>
-                  <Tooltip>
-                    {/* @ts-ignore */}
-                    <TooltipTrigger asChild>
-                      <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-primary rounded-lg">
-                        <BookOpen className="w-4 h-4" />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent className="text-xs">Search Case Law</TooltipContent>
-                  </Tooltip>
+                <div className="flex items-center gap-1 select-none">
+                  <span className="text-[10px] text-muted-foreground/60 font-mono pl-1">
+                    Enter key to send, Shift+Enter for new line
+                  </span>
                 </div>
 
                 <Button 
@@ -366,6 +635,59 @@ export default function AICanvasPage() {
         </ResizablePanel>
 
       </ResizablePanelGroup>
+      {/* PDF Source Details Modal */}
+      <AnimatePresence>
+        {activeSource && (
+          <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="bg-[#0C1222] border border-border w-full max-w-2xl rounded-2xl shadow-2xl flex flex-col max-h-[85vh] overflow-hidden"
+            >
+              {/* Modal Header */}
+              <div className="p-6 border-b border-border flex justify-between items-center bg-[#090D1A]">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-rose-500/10 text-rose-500 rounded-lg border border-rose-500/20">
+                    <FileText className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-sm text-foreground truncate max-w-md">
+                      {activeSource.document_name}
+                    </h3>
+                    <p className="text-[11px] text-muted-foreground mt-0.5 font-mono">
+                      {activeSource.page ? `Sayfa ${activeSource.page}` : "Sayfa Belirtilmemiş"} • Eşleşme Skoru: %{((activeSource.score || 0) * 100).toFixed(0)}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setActiveSource(null)}
+                  className="text-muted-foreground hover:text-foreground text-sm font-semibold p-2 hover:bg-elevated rounded-lg transition-colors"
+                >
+                  Kapat
+                </button>
+              </div>
+
+              {/* Modal Content */}
+              <div className="flex-1 overflow-y-auto p-6 bg-[#090D1A]/50">
+                <div className="bg-[#121A2F]/80 border border-border/80 rounded-xl p-5 leading-relaxed text-sm text-foreground/95 whitespace-pre-wrap font-serif">
+                  {activeSource.text || "Bu bölümün metin içeriği yüklenemedi."}
+                </div>
+              </div>
+
+              {/* Modal Footer */}
+              <div className="p-4 border-t border-border bg-[#0C1222] flex justify-end">
+                <Button
+                  onClick={() => setActiveSource(null)}
+                  className="bg-primary hover:bg-primary/95 text-white text-xs font-semibold px-5 h-9"
+                >
+                  Anladım, Kapat
+                </Button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

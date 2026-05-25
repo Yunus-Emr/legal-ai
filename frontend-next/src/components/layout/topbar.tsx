@@ -1,6 +1,10 @@
 "use client";
 
-import { useEffect } from "react";
+/**
+ * TopBar Component — Multi-Language Dynamic Translation
+ */
+
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Search, Bell, Menu } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -10,6 +14,24 @@ import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Sidebar } from "./sidebar";
 import { useAuthStore } from "@/store/authStore";
 import { authApi } from "@/lib/api";
+
+/* ── Translations ──────────────────────────────────────────────────────── */
+const TRANSLATIONS = {
+  tr: {
+    search: "Emsal karar, dava dosyası veya komut ara... (Cmd+K)",
+    notifications: "Bildirimler",
+    signOut: "Çıkış Yap",
+    clickToSignOut: "Çıkış yapmak için tıklayın",
+    loading: "Yükleniyor..."
+  },
+  en: {
+    search: "Search case law, matters, or command shortcuts... (Cmd+K)",
+    notifications: "Notifications",
+    signOut: "Sign out",
+    clickToSignOut: "Click to sign out",
+    loading: "Loading..."
+  }
+};
 
 function getInitials(name: string | null | undefined): string {
   if (!name) return "??";
@@ -24,6 +46,22 @@ function getInitials(name: string | null | undefined): string {
 export function TopBar() {
   const router = useRouter();
   const { user, isAuthenticated, setUser, logout } = useAuthStore();
+  const [lang, setLang] = useState<"tr" | "en">("tr");
+
+  /* Dynamic Translation Hook */
+  useEffect(() => {
+    const loadLang = () => {
+      try {
+        const p = JSON.parse(localStorage.getItem("lexai_prefs") || "{}");
+        if (p.lang === "tr" || p.lang === "en") setLang(p.lang);
+      } catch {}
+    };
+    loadLang();
+    window.addEventListener("lexai_prefs_changed", loadLang);
+    return () => window.removeEventListener("lexai_prefs_changed", loadLang);
+  }, []);
+
+  const t = TRANSLATIONS[lang] || TRANSLATIONS.tr;
 
   // Kullanıcı bilgisi store'da yoksa /me endpoint'inden çek
   useEffect(() => {
@@ -45,7 +83,7 @@ export function TopBar() {
     router.push("/login");
   };
 
-  const displayName = user?.name ?? "Loading...";
+  const displayName = user?.name ?? t.loading;
   const displayRole = user?.role
     ? user.role.charAt(0).toUpperCase() + user.role.slice(1)
     : "";
@@ -53,7 +91,7 @@ export function TopBar() {
   return (
     <header className="h-[64px] flex-shrink-0 flex items-center justify-between px-4 md:px-6 glass-panel border-x-0 border-t-0 rounded-none sticky top-0 z-10">
 
-      {/* Mobile Menu — SheetTrigger with render prop to avoid nested button */}
+      {/* Mobile Menu */}
       <div className="md:hidden mr-2">
         <Sheet>
           <SheetTrigger
@@ -80,15 +118,15 @@ export function TopBar() {
         <div className="relative group">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground group-focus-within:text-primary transition-colors" />
           <Input
-            placeholder="Search case law, matters, or command shortcuts... (Cmd+K)"
-            className="w-full bg-[#1A2235]/50 border-transparent focus-visible:ring-1 focus-visible:ring-primary pl-10 pr-4 h-10 rounded-lg shadow-sm font-sans"
+            placeholder={t.search}
+            className="w-full bg-secondary/60 border-transparent focus-visible:ring-1 focus-visible:ring-primary pl-10 pr-4 h-10 rounded-lg shadow-sm font-sans text-foreground placeholder-muted-foreground"
           />
         </div>
       </div>
 
       {/* Right Actions */}
       <div className="flex items-center gap-2 md:gap-4 ml-4">
-        {/* Notification bell — TooltipTrigger with render prop */}
+        {/* Notification bell */}
         <Tooltip>
           <TooltipTrigger
             render={
@@ -100,45 +138,45 @@ export function TopBar() {
             }
           >
             <Bell className="w-5 h-5" />
-            <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-primary ring-2 ring-[#111827]" />
+            <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-primary ring-2 ring-background" />
           </TooltipTrigger>
           <TooltipContent side="bottom" align="end" className="text-xs">
-            Notifications
+            {t.notifications}
           </TooltipContent>
         </Tooltip>
 
         <div className="h-6 w-px bg-border mx-1 md:mx-2" />
 
-        {/* User avatar / logout — TooltipTrigger with render prop */}
+        {/* User avatar / logout */}
         <Tooltip>
           <TooltipTrigger
             render={
               <button
                 type="button"
-                className="flex items-center gap-3 hover:opacity-80 transition-opacity"
+                className="flex items-center gap-3 hover:opacity-80 transition-opacity text-foreground"
                 onClick={handleLogout}
-                title="Click to sign out"
-                aria-label="Sign out"
+                title={t.clickToSignOut}
+                aria-label={t.signOut}
               />
             }
           >
             <div className="text-right hidden md:block">
-              <p className="text-sm font-medium leading-none font-sans">{displayName}</p>
+              <p className="text-sm font-semibold leading-none font-sans">{displayName}</p>
               {displayRole && (
                 <p className="text-xs text-muted-foreground mt-1 font-sans capitalize">
-                  {displayRole}
+                  {displayRole === "Admin" ? (lang === "tr" ? "Yönetici" : "Admin") : displayRole}
                 </p>
               )}
             </div>
             <Avatar className="w-9 h-9 border border-border">
               <AvatarImage src="" />
-              <AvatarFallback className="bg-primary/20 text-primary font-medium text-xs font-sans">
+              <AvatarFallback className="bg-primary/20 text-primary font-bold text-xs font-sans">
                 {user ? getInitials(user.name) : "??"}
               </AvatarFallback>
             </Avatar>
           </TooltipTrigger>
           <TooltipContent side="bottom" align="end" className="text-xs">
-            Sign out
+            {t.signOut}
           </TooltipContent>
         </Tooltip>
       </div>
