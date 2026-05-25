@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import {
   Send, FileText, Download, Sparkles, Network, Paperclip,
   ThumbsUp, ThumbsDown, ChevronDown, BookOpen, Scale, CheckCircle2,
-  ArrowRight, Plus, Trash2, MessageSquare, Folder, CornerDownLeft
+  ArrowRight, Plus, Trash2, MessageSquare, Folder, CornerDownLeft, History
 } from "lucide-react";
 import { type Source, chatApi, documentsApi, Document } from "@/lib/api";
 import { motion, AnimatePresence } from "framer-motion";
@@ -400,7 +400,7 @@ export default function AICanvasPage() {
   useEffect(() => {
     if (isGuest && !isStreaming && messages.length > 0 && sessionId) {
       localStorage.setItem(`lexai_guest_history_${sessionId}`, JSON.stringify(messages));
-      
+
       const storedSessions = JSON.parse(localStorage.getItem("lexai_guest_sessions") || "[]");
       const exists = storedSessions.find((s: any) => s.session_id === sessionId);
       if (!exists) {
@@ -416,9 +416,9 @@ export default function AICanvasPage() {
         localStorage.setItem("lexai_guest_sessions", JSON.stringify(updated));
         setChatSessions(updated);
       } else {
-        const updated = storedSessions.map((s: any) => 
-          s.session_id === sessionId 
-            ? { ...s, last_activity: new Date().toISOString() } 
+        const updated = storedSessions.map((s: any) =>
+          s.session_id === sessionId
+            ? { ...s, last_activity: new Date().toISOString() }
             : s
         );
         localStorage.setItem("lexai_guest_sessions", JSON.stringify(updated));
@@ -545,76 +545,9 @@ export default function AICanvasPage() {
     }
   };
   return (
-    <div className="h-full flex flex-col bg-background font-sans">
+    <div className="absolute inset-0 flex flex-col bg-background font-sans overflow-hidden">
       {/* @ts-expect-error - known React 19 compat issue with react-resizable-panels prop types */}
       <ResizablePanelGroup direction="horizontal" className="flex-1">
-
-        {/* Panel 1: ChatGPT-style Sidebar (Left) */}
-        <ResizablePanel
-          defaultSize={18}
-          minSize={12}
-          maxSize={25}
-          className="bg-slate-950 border-r border-slate-900 text-slate-200 flex flex-col p-4 shrink-0 relative"
-        >
-          {/* Yeni Sohbet Button */}
-          <Button
-            onClick={handleNewChat}
-            className="w-full justify-start gap-2 bg-slate-900 hover:bg-slate-800 text-slate-100 border border-slate-800 rounded-lg text-xs font-semibold py-5 transition-all mb-4 shadow-sm group"
-          >
-            <Plus className="w-4 h-4 text-primary group-hover:scale-110 transition-transform" />
-            Yeni Sohbet
-          </Button>
-
-          {/* History ScrollArea */}
-          <ScrollArea className="flex-1 -mx-2 px-2">
-            <div className="space-y-4">
-              <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest px-2 mb-2 flex items-center gap-1.5 select-none">
-                <MessageSquare className="w-3.5 h-3.5 text-slate-500" />
-                Geçmiş Sohbetler
-              </div>
-
-              {isLoadingSessions ? (
-                <div className="space-y-2 px-2">
-                  {[1, 2, 3].map(i => (
-                    <div key={i} className="h-8 bg-slate-900/40 rounded-lg animate-pulse" />
-                  ))}
-                </div>
-              ) : chatSessions.length === 0 ? (
-                <p className="text-[10px] text-slate-500 italic px-2">
-                  Henüz geçmiş sohbet yok.
-                </p>
-              ) : (
-                chatSessions.map((session) => {
-                  const isActive = sessionId === session.session_id;
-                  return (
-                    <div
-                      key={session.session_id}
-                      onClick={() => handleSelectSession(session.session_id)}
-                      className={`w-full text-left px-3 py-2 rounded-lg text-xs font-medium transition-all flex items-center justify-between gap-2 group cursor-pointer border ${isActive
-                          ? "bg-primary/20 text-primary border border-primary/30 shadow-[0_0_12px_rgba(59,111,232,0.15)]"
-                          : "text-slate-400 hover:bg-slate-900 hover:text-slate-200 border border-transparent"
-                        }`}
-                    >
-                      <div className="flex items-center gap-2 truncate flex-1">
-                        <MessageSquare className={`w-3.5 h-3.5 shrink-0 ${isActive ? "text-primary" : "text-slate-600 group-hover:text-slate-500"}`} />
-                        <span className="truncate font-sans font-normal">{session.title || "Sohbet"}</span>
-                      </div>
-                      <button
-                        onClick={(e) => handleDeleteSession(e, session.session_id)}
-                        className="opacity-0 group-hover:opacity-100 p-1 hover:bg-slate-800 rounded text-slate-500 hover:text-rose-400 transition-all shrink-0 animate-in fade-in duration-200"
-                        title="Sohbeti Sil"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  );
-                })
-              )}
-            </div>
-          </ScrollArea>
-        </ResizablePanel>
-
-        <ResizableHandle className="w-1 bg-border hover:bg-primary/50 transition-colors relative z-20" />
 
         {/* Panel 2: Collapsible Document Reader (Middle, only shown if selectedDoc is set) */}
         {selectedDoc && (
@@ -735,7 +668,7 @@ export default function AICanvasPage() {
         )}
 
         {/* Panel 3: Main AI Chat Panel */}
-        <ResizablePanel defaultSize={selectedDoc ? 34 : 82} minSize={30} className="bg-surface flex flex-col relative z-10 shadow-2xl">
+        <ResizablePanel defaultSize={selectedDoc ? 52 : 100} minSize={30} className="bg-surface flex flex-col relative z-10 shadow-2xl">
 
           {/* Main Top Header: Dynamic Dropdown Selector */}
           <div className="h-14 border-b border-border flex items-center justify-between px-6 shrink-0 glass-panel bg-surface/80 backdrop-blur-md">
@@ -760,8 +693,88 @@ export default function AICanvasPage() {
             </div>
 
             <div className="flex items-center gap-3">
+              {/* Yeni Sohbet Button */}
+              <Button
+                onClick={handleNewChat}
+                variant="ghost"
+                size="sm"
+                className="h-9 gap-1.5 text-xs font-semibold text-foreground hover:bg-elevated border border-border/40"
+              >
+                <Plus className="w-3.5 h-3.5 text-primary" />
+                Yeni Sohbet
+              </Button>
+
+              {/* Chat History Dropdown */}
+              <DropdownMenu>
+                {/* @ts-expect-error */}
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-9 gap-2 border-border/80 bg-background text-xs font-semibold hover:bg-elevated transition-colors shadow-sm"
+                  >
+                    <History className="w-4 h-4 text-primary" />
+                    Geçmiş Sohbetler
+                    {chatSessions.length > 0 && (
+                      <span className="ml-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-primary/20 text-primary">
+                        {chatSessions.length}
+                      </span>
+                    )}
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-80 bg-[#0C1222] border-border text-foreground max-h-96 overflow-y-auto shadow-2xl p-1 rounded-xl">
+                  <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest p-3 block border-b border-border/50">
+                    GEÇMİŞ SOHBETLER
+                  </span>
+
+                  {isLoadingSessions ? (
+                    <div className="space-y-2 p-3">
+                      {[1, 2, 3].map(i => (
+                        <div key={i} className="h-8 bg-slate-900/40 rounded-lg animate-pulse" />
+                      ))}
+                    </div>
+                  ) : chatSessions.length === 0 ? (
+                    <div className="p-4 text-center text-xs text-muted-foreground italic">
+                      Henüz geçmiş sohbet yok.
+                    </div>
+                  ) : (
+                    <div className="p-1 space-y-1">
+                      {chatSessions.map((session) => {
+                        const isActive = sessionId === session.session_id;
+                        return (
+                          <DropdownMenuItem
+                            key={session.session_id}
+                            onClick={() => handleSelectSession(session.session_id)}
+                            className={`w-full text-left px-3 py-2 rounded-lg text-xs font-medium transition-all flex items-center justify-between gap-2 cursor-pointer ${isActive
+                                ? "bg-primary/20 text-primary"
+                                : "hover:bg-slate-900 text-slate-300 hover:text-slate-100"
+                              }`}
+                          >
+                            <div className="flex items-center gap-2 truncate flex-1">
+                              <MessageSquare className={`w-3.5 h-3.5 shrink-0 ${isActive ? "text-primary" : "text-slate-500"}`} />
+                              <span className="truncate">{session.title || "Sohbet"}</span>
+                            </div>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeleteSession(e, session.session_id);
+                              }}
+                              className="p-1 hover:bg-slate-800 rounded text-slate-500 hover:text-rose-400 transition-all shrink-0"
+                              title="Sohbeti Sil"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </DropdownMenuItem>
+                        );
+                      })}
+                    </div>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
+
               {/* Dynamic Document Reference Selector */}
               <DropdownMenu>
+                {/* @ts-expect-error */}
                 <DropdownMenuTrigger asChild>
                   <Button variant="outline" size="sm" className="h-9 gap-2 border-border/80 bg-background text-xs font-semibold hover:bg-elevated transition-colors shadow-sm">
                     <BookOpen className="w-4 h-4 text-rose-500" />
