@@ -151,3 +151,19 @@ class MatterInsight(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
+class DocumentTOC(Base):
+    __tablename__ = "document_toc"
+    document_id = Column(String, ForeignKey("documents.id", ondelete="CASCADE"), primary_key=True)
+    toc = Column(JSON, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class DocumentNode(Base):
+    __tablename__ = "document_nodes"
+    document_id = Column(String, ForeignKey("documents.id", ondelete="CASCADE"), primary_key=True)
+    node_id = Column(String, primary_key=True)
+    title = Column(String, nullable=False)
+    content = Column(Text, nullable=False)
+    node_metadata = Column("metadata", JSON, nullable=True)
+
+

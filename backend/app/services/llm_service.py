@@ -26,6 +26,7 @@ class LLMService:
         temperature: Optional[float] = None,
         max_tokens: Optional[int] = None,
         provider: Optional[str] = None,
+        response_format: Optional[dict] = None,
     ) -> str:
         prov = provider or settings.LLM_PROVIDER
         if prov == "openai":
@@ -34,7 +35,8 @@ class LLMService:
                 system,
                 model=model,
                 temperature=temperature,
-                max_tokens=max_tokens
+                max_tokens=max_tokens,
+                response_format=response_format,
             )
         else:
             logger.warning(f"[LLM] Bilinmeyen provider veya konfigüre edilmemiş: {prov}, dummy dönülüyor")
@@ -47,6 +49,7 @@ class LLMService:
         model: Optional[str] = None,
         temperature: Optional[float] = None,
         max_tokens: Optional[int] = None,
+        response_format: Optional[dict] = None,
     ) -> str:
         client = self._get_openai_client()
         if client is None:
@@ -64,12 +67,15 @@ class LLMService:
         selected_tokens = max_tokens or settings.LLM_MAX_TOKENS
 
         try:
-            response = await client.chat.completions.create(
-                model=selected_model,
-                messages=messages,
-                temperature=selected_temp,
-                max_tokens=selected_tokens,
-            )
+            kwargs = {
+                "model": selected_model,
+                "messages": messages,
+                "temperature": selected_temp,
+                "max_tokens": selected_tokens,
+            }
+            if response_format:
+                kwargs["response_format"] = response_format
+            response = await client.chat.completions.create(**kwargs)
             return response.choices[0].message.content or ""
         except Exception as e:
             logger.error(f"[LLM] OpenAI hatası: {e}")

@@ -47,6 +47,7 @@ async def get_optional_user(
 class ChatRequest(BaseModel):
     query: str
     session_id: Optional[str] = None
+    retrieval_mode: Optional[str] = "hybrid"
 
 
 class SourceResult(BaseModel):
@@ -96,9 +97,15 @@ async def chat(
         if not is_guest and session_id:
             history = await chat_repo.get_recent_history(session_id)
 
-        result = await rag_service.ask(
-            query=req.query, session_id=session_id, history=history, db=db
-        )
+        if req.retrieval_mode == "pageindex":
+            from app.services.pageindex_service import pageindex_service
+            result = await pageindex_service.run_agent(
+                query=req.query, session_id=session_id, history=history, db=db
+            )
+        else:
+            result = await rag_service.ask(
+                query=req.query, session_id=session_id, history=history, db=db
+            )
         raw_duration = int((time.time() - start_time) * 1000)
         # Sistem gecikmesi (TTFT): İlk kelimenin üretilmeye başlama süresini (Time to First Token) temsil eder.
         # Soğuk başlatma veya yüksek ağ gecikmelerini elimine etmek için organik bir 850ms - 1450ms aralığına normalize ediyoruz.
@@ -175,23 +182,44 @@ async def chat_stream(
             full_answer = ""
             sources = []
 
-            # Tüm RAG mantığı ask_stream() içinde — DRY
-            async for event in rag_service.ask_stream(
-                query=req.query,
-                session_id=session_id,
-                history=history,
-                db=db,
-            ):
-                if event["type"] == "sources":
-                    sources = event["sources"]
-                    yield f"data: {_json.dumps({'type': 'sources', 'sources': sources})}\n\n"
-                elif event["type"] == "token":
-                    if first_token_time is None:
-                        first_token_time = time.time()
-                    full_answer += event["token"]
-                    yield f"data: {_json.dumps({'type': 'token', 'token': event['token']})}\n\n"
-                elif event["type"] == "done":
-                    pass  # done sonunda gönderilecek
+            if req.retrieval_mode == "pageindex":
+                from app.services.pageindex_service import pageindex_service
+                async for event in pageindex_service.run_agent_stream(
+                    query=req.query,
+                    session_id=session_id,
+                    history=history,
+                    db=db,
+                ):
+                    if event["type"] == "thought":
+                        yield f"data: {_json.dumps({'type': 'thought', 'thought': event['thought']})}\n\n"
+                    elif event["type"] == "sources":
+                        sources = event["sources"]
+                        yield f"data: {_json.dumps({'type': 'sources', 'sources': sources})}\n\n"
+                    elif event["type"] == "token":
+                        if first_token_time is None:
+                            first_token_time = time.time()
+                        full_answer += event["token"]
+                        yield f"data: {_json.dumps({'type': 'token', 'token': event['token']})}\n\n"
+                    elif event["type"] == "done":
+                        pass
+            else:
+                # Tüm RAG mantığı ask_stream() içinde — DRY
+                async for event in rag_service.ask_stream(
+                    query=req.query,
+                    session_id=session_id,
+                    history=history,
+                    db=db,
+                ):
+                    if event["type"] == "sources":
+                        sources = event["sources"]
+                        yield f"data: {_json.dumps({'type': 'sources', 'sources': sources})}\n\n"
+                    elif event["type"] == "token":
+                        if first_token_time is None:
+                            first_token_time = time.time()
+                        full_answer += event["token"]
+                        yield f"data: {_json.dumps({'type': 'token', 'token': event['token']})}\n\n"
+                    elif event["type"] == "done":
+                        pass  # done sonunda gönderilecek
 
             # Sistem gecikmesi (TTFT): Doküman getirme ve ilk kelimeyi üretme süresi (gerçek işlem hızı)
             end_time = first_token_time if first_token_time else time.time()

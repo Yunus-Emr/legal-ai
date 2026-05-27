@@ -294,7 +294,8 @@ export default function AICanvasPage() {
   const [activeDocChunks, setActiveDocChunks] = useState<any[]>([]);
   const [isLoadingChunks, setIsLoadingChunks] = useState(false);
 
-  const { sessionId, messages, isStreaming, sources, error, sendMessage, clearChat, setSession } = useChat();
+  const { sessionId, messages, isStreaming, sources, error, sendMessage, clearChat, setSession, thoughts } = useChat();
+  const [retrievalMode, setRetrievalMode] = useState<"hybrid" | "pageindex">("hybrid");
   const [chatSessions, setChatSessions] = useState<any[]>([]);
   const [isLoadingSessions, setIsLoadingSessions] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -526,7 +527,7 @@ export default function AICanvasPage() {
       }
       enrichedPrompt += input.trim();
 
-      sendMessage(enrichedPrompt);
+      sendMessage(enrichedPrompt, { retrieval_mode: retrievalMode });
       setInput("");
 
       // Simulate credit cost deduction ($0.05 per AI query)
@@ -803,6 +804,30 @@ export default function AICanvasPage() {
                 </DropdownMenuContent>
               </DropdownMenu>
 
+              {/* RAG Mode Switcher */}
+              <div className="flex items-center gap-1 bg-[#090D1A] border border-border/60 p-1 rounded-xl shadow-inner select-none mr-2">
+                <button
+                  onClick={() => setRetrievalMode("hybrid")}
+                  className={`px-3 py-1 rounded-lg text-[10px] font-bold tracking-wide uppercase transition-all duration-200 ${
+                    retrievalMode === "hybrid"
+                      ? "bg-primary/20 text-primary border border-primary/30 shadow-md"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  Fast Hybrid RAG
+                </button>
+                <button
+                  onClick={() => setRetrievalMode("pageindex")}
+                  className={`px-3 py-1 rounded-lg text-[10px] font-bold tracking-wide uppercase transition-all duration-200 ${
+                    retrievalMode === "pageindex"
+                      ? "bg-rose-500/20 text-rose-500 border border-rose-500/30 shadow-md"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  PageIndex Agent
+                </button>
+              </div>
+
               <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-rose-500/10 text-rose-500 border border-rose-500/20 rounded-lg text-[10px] font-bold font-mono uppercase tracking-wider shadow-sm select-none">
                 <Scale className="w-3.5 h-3.5 text-rose-500" />
                 Türk Hukuku
@@ -858,6 +883,28 @@ export default function AICanvasPage() {
                       ) : (
                         <div className="ai-glow rounded-2xl rounded-tl-none mt-1 w-full shadow-md">
                           <div className="glass-panel p-5 rounded-2xl rounded-tl-none text-sm leading-relaxed text-foreground/90 font-sans min-h-12">
+                            {/* Streaming thoughts reasoning */}
+                            {isStreaming && index === messages.length - 1 && thoughts && thoughts.length > 0 && (
+                              <div className="mb-4 p-4 rounded-xl bg-[#7C3AED]/5 border border-[#7C3AED]/15 shadow-inner space-y-2">
+                                <div className="flex items-center gap-2 text-xs font-bold text-[#7C3AED] select-none">
+                                  <Sparkles className="w-3.5 h-3.5 animate-spin" /> AJAN DÜŞÜNCE SÜRECİ
+                                </div>
+                                <div className="space-y-1.5 pl-1">
+                                  {thoughts.map((thought, tIdx) => (
+                                    <motion.div
+                                      key={tIdx}
+                                      initial={{ opacity: 0, x: -5 }}
+                                      animate={{ opacity: 1, x: 0 }}
+                                      className="text-xs text-muted-foreground font-mono flex items-start gap-2"
+                                    >
+                                      <span className="text-[#7C3AED] font-bold shrink-0">›</span>
+                                      <span>{thought}</span>
+                                    </motion.div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+
                             {msg.content ? (
                               renderMarkdown(msg.content)
                             ) : (

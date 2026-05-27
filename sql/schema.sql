@@ -139,3 +139,21 @@ CREATE TABLE IF NOT EXISTS matters (
 );
 CREATE INDEX IF NOT EXISTS idx_matters_user   ON matters(user_id);
 CREATE INDEX IF NOT EXISTS idx_matters_status ON matters(status);
+
+-- ── PageIndex (Vectorless RAG) ──────────────────────────
+CREATE TABLE IF NOT EXISTS document_toc (
+    document_id VARCHAR(36) PRIMARY KEY REFERENCES documents(id) ON DELETE CASCADE,
+    toc JSONB NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS document_nodes (
+    document_id VARCHAR(36) REFERENCES documents(id) ON DELETE CASCADE,
+    node_id VARCHAR(100) NOT NULL,
+    title VARCHAR(500) NOT NULL,
+    content TEXT NOT NULL,
+    metadata JSONB,
+    PRIMARY KEY (document_id, node_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_document_nodes_doc ON document_nodes(document_id);

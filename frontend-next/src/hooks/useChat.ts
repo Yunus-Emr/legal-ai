@@ -8,9 +8,10 @@ export interface ChatSession {
   isStreaming: boolean;
   sources: Source[];
   error: string | null;
-  sendMessage: (query: string) => Promise<void>;
+  sendMessage: (query: string, options?: { retrieval_mode?: string }) => Promise<void>;
   clearChat: () => void;
   setSession: (id: string, initialMessages?: ChatMessage[]) => void;
+  thoughts: string[];
 }
 
 export function useChat(): ChatSession {
@@ -19,15 +20,17 @@ export function useChat(): ChatSession {
   const [isStreaming, setIsStreaming] = useState(false);
   const [sources, setSources] = useState<Source[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [thoughts, setThoughts] = useState<string[]>([]);
   
   const abortControllerRef = useRef<AbortController | null>(null);
 
-  const sendMessage = useCallback(async (query: string) => {
+  const sendMessage = useCallback(async (query: string, options?: { retrieval_mode?: string }) => {
     if (!query.trim()) return;
 
     setError(null);
     setIsStreaming(true);
     setSources([]);
+    setThoughts([]);
 
     // Add user message to UI immediately
     setMessages((prev) => [...prev, { role: "user", content: query }]);
@@ -54,7 +57,11 @@ export function useChat(): ChatSession {
         {
           method: "POST",
           headers,
-          body: JSON.stringify({ query, session_id: sessionId }),
+          body: JSON.stringify({
+            query,
+            session_id: sessionId,
+            retrieval_mode: options?.retrieval_mode || "hybrid",
+          }),
           signal: abortControllerRef.current.signal,
         }
       );
@@ -79,8 +86,6 @@ export function useChat(): ChatSession {
           buffer += decoder.decode(value, { stream: true });
           
           // Process full messages (separated by \n\n in SSE)
-          // Actually, many SSE implementations just use \n or \n\n.
-          // Let's split by \n and handle lines.
           let lines = buffer.split("\n");
           
           // Keep the last partial line in the buffer
@@ -98,6 +103,8 @@ export function useChat(): ChatSession {
               
               if (data.type === "session" && data.session_id) {
                 setSessionId(data.session_id);
+              } else if (data.type === "thought" && data.thought !== undefined) {
+                setThoughts((prev) => [...prev, data.thought]);
               } else if (data.type === "token" && data.token !== undefined) {
                 setMessages((prev) => {
                   if (prev.length === 0) return prev;
@@ -141,6 +148,7 @@ export function useChat(): ChatSession {
     setSessionId(null);
     setSources([]);
     setError(null);
+    setThoughts([]);
   }, []);
 
   const setSession = useCallback((id: string, initialMessages: ChatMessage[] = []) => {
@@ -148,6 +156,7 @@ export function useChat(): ChatSession {
     setMessages(initialMessages);
     setSources([]);
     setError(null);
+    setThoughts([]);
   }, []);
 
   return {
@@ -159,5 +168,6 @@ export function useChat(): ChatSession {
     sendMessage,
     clearChat,
     setSession,
+    thoughts,
   };
 }

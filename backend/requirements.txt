@@ -18,8 +18,11 @@ openai==1.13.3
 
 # ── PDF & Document Parsing ────────────────────────────────────
 pdfplumber==0.10.3
+pymupdf==1.23.26
 beautifulsoup4==4.12.3  # HTML parsing (document_service.py)
 python-docx==1.1.2      # DOCX desteği (document_service.py)
+colorama==0.4.6
+tqdm==4.66.2
 
 # ── Utils ─────────────────────────────────────────────────────
 python-dotenv==1.0.1

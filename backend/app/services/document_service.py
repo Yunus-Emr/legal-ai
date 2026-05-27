@@ -114,6 +114,17 @@ class DocumentService:
             from app.services.retrieval_service import retrieval_service
             indexed = await retrieval_service.index_chunks(chunks)
 
+            # PageIndex (Vektörsüz RAG) Oluşturma ve Kaydetme
+            try:
+                from scripts.build_pageindex import process_pdf
+                raw_dir = os.getenv("DATA_DIR", "/app/data/raw_pdfs")
+                pdf_path = os.path.join(raw_dir, f"{doc_id}.pdf")
+                if os.path.exists(pdf_path):
+                    await process_pdf(pdf_path)
+                    logger.info(f"[DocService] {filename} için PageIndex başarıyla oluşturuldu.")
+            except Exception as e_pageindex:
+                logger.error(f"[DocService] {filename} için PageIndex oluşturulurken hata: {e_pageindex}", exc_info=True)
+
             from sqlalchemy import text
             async with SessionLocal() as db:
                 await db.execute(
